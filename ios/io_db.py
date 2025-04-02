@@ -11,7 +11,7 @@ class NewsletterSubscriber(BaseModel):
     id: Optional[UUID] = None
     first_name: str
     email: EmailStr
-    postcode: Optional[str] = Field(None, min_length=3, max_length=4)
+    postcode: Optional[str] = Field(None, min_length=2, max_length=4)
     subscribed_at: Optional[datetime] = None
     email_verified: bool = False
 
@@ -26,12 +26,20 @@ def insert_newsletter_subscriber(supabase, subscriber: NewsletterSubscriber) -> 
     Insert a new newsletter subscriber into the database
     """
     try:
-        response = supabase.table('newsletter_subscribers').insert({
+        data_to_insert = {
             "first_name": subscriber.first_name,
             "email": subscriber.email,
             "postcode": subscriber.postcode,
             "email_verified": subscriber.email_verified
-        }).execute()
+        }
+        logger.debug(f"insert_newsletter_subscriber(): Data to insert: {data_to_insert}")
+        
+        response = supabase.table('newsletter_subscribers').insert(data_to_insert).execute()
+        
+        if response.data:
+            logger.info(f"insert_newsletter_subscriber(): Inserted data: {response.data[0]}")
+        else:
+            logger.warning("insert_newsletter_subscriber(): No data returned from insert operation.")
         
         return response.data[0] if response.data else None
     except Exception as e:
