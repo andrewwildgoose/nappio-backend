@@ -30,16 +30,20 @@ app = FastAPI()
 router = APIRouter(
     prefix="/api/v1",
     tags=["newsletter"]
+
 )
+# Frontend URL
+FRONTEND_URL = os.environ.get('FRONTEND_URL')
 
 # Configure CORS
 origins = [
     # Dev URLS
-    # TODO: inject frontend URL from environment variable
+
     "http://localhost",
     "http://localhost:3000",
-    "http://localhost:5173",
-    # Add your frontend URL here
+    "http://localhost:5173",    
+    # inject frontend URL from environment variable
+    FRONTEND_URL,
 ]
 
 app.add_middleware(
@@ -50,8 +54,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Frontend URL
-FRONTEND_URL = os.environ.get('FRONTEND_URL')
+
 
 
 # Supabase configuration
