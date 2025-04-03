@@ -25,4 +25,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Run the application
-CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]
