@@ -1,12 +1,22 @@
 name: nappio-backend
 services:
   - name: web
-    environment_slug: python
+    environment_slug: docker
+    dockerfile_path: Dockerfile
     github:
       branch: main
       deploy_on_push: true
-    build_command: ./build.sh
-    run_command: uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8080}
     envs:
       - key: PYTHONPATH
-        value: /workspace
+        value: /app
+      - key: EMAIL_API_TOKEN_TEST
+        scope: RUN_TIME
+        type: SECRET
+      - key: SUPABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: SUPABASE_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: SERVICE_NAME
+        value: Nappio
