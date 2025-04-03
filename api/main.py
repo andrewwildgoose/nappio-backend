@@ -38,7 +38,6 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL')
 # Configure CORS
 origins = [
     # Dev URLS
-
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:5173",    

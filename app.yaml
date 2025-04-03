@@ -1,0 +1,12 @@
+name: nappio-backend
+services:
+  - name: web
+    environment_slug: python
+    github:
+      branch: main
+      deploy_on_push: true
+    build_command: ./build.sh
+    run_command: uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}
+    envs:
+      - key: PYTHONPATH
+        value: /workspace
