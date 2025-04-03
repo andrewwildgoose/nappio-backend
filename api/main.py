@@ -24,7 +24,13 @@ logger.setLevel(logging.DEBUG)
 load_dotenv()
 
 # Initialize FastAPI app
-app = FastAPI()
+app = FastAPI(
+    title="Nappio API",
+    description="Backend API for Nappio newsletter service",
+    version="1.0.0",
+    docs_url="/docs",    # Swagger UI at /docs
+    redoc_url="/redoc"   # ReDoc at /redoc
+)
 
 # Create APIRouter instance
 router = APIRouter(
@@ -63,6 +69,18 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Stripe configuration
 #stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+
+# Root route for health chec
+@app.get("/")
+async def root():
+    """
+    Root endpoint - can be used for health checks
+    """
+    return {
+        "status": "ok",
+        "service": "Nappio API",
+        "version": "1.0.0"
+    }
 
 # Newsletter routes
 @router.post("/newsletter/subscribe", response_model=NewsletterSubscriber)
