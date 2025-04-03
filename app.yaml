@@ -6,7 +6,7 @@ services:
       branch: main
       deploy_on_push: true
     build_command: ./build.sh
-    run_command: uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}
+    run_command: uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8080}
     envs:
       - key: PYTHONPATH
         value: /workspace
