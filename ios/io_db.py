@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
+import pytz
 from uuid import UUID
 
 logger = logging.getLogger('uvicorn.error')
@@ -30,7 +31,8 @@ def insert_newsletter_subscriber(supabase, subscriber: NewsletterSubscriber) -> 
             "first_name": subscriber.first_name,
             "email": subscriber.email,
             "postcode": subscriber.postcode,
-            "email_verified": subscriber.email_verified
+            "subscribed_at": datetime.now(pytz.UTC).isoformat(),
+            "email_verified": subscriber.email_verified,
         }
         logger.debug(f"insert_newsletter_subscriber(): Data to insert: {data_to_insert}")
         
