@@ -98,7 +98,8 @@ def subscribe_to_newsletter(subscriber: NewsletterSubscriber):
             raise HTTPException(status_code=400, detail="Failed to subscribe")
         
         # Generate a confirmation link
-        confirmation_link = f"{FRONTEND_URL}/confirm-email?email={subscriber.email}"
+        #TODO: this causes a double forward slash in the URL, fix it
+        confirmation_link = f"{FRONTEND_URL}confirm-email?email={subscriber.email}"
         logger.debug(f"Generated confirmation link: {confirmation_link}")
         
         # Send confirmation email
