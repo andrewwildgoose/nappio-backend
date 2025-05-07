@@ -4,13 +4,14 @@ from dotenv import load_dotenv
 import logging
 
 # FastAPI imports
-from fastapi import FastAPI, APIRouter, Depends, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 # Intergration imports
 #import stripe
 from supabase import create_client, Client
+import stripe
 
 # Custom imports
 from ios.io_db import NewsletterSubscriber, EmailVerificationRequest, EmailVerificationResponse, insert_newsletter_subscriber, verify_newsletter_subscriber
@@ -68,7 +69,7 @@ SUPABASE_KEY: str = os.environ.get('SUPABASE_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Stripe configuration
-#stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
 
 # Root route for health chec
 @app.get("/")
@@ -136,6 +137,50 @@ def verify_subscriber_email(request: EmailVerificationRequest):
     except Exception as e:
         logger.exception(f"verify_subscriber_email(): Error verifying email {email}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+#TEST METHODS
+
+# Create APIRouter instance for test routes
+test_router = APIRouter(
+    prefix="/api/test",
+    tags=["test"]
+)
+
+@test_router.post("/jwt")
+async def test_jwt_endpoint(request: Request):
+    """
+    Test endpoint for JWT verification
+    Logs the JWT from the Authorization header
+    """
+    try:
+        # Get the Authorization header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            logger.warning("test_jwt_endpoint(): No Authorization header found")
+            raise HTTPException(status_code=401, detail="No Authorization header")
+
+        # Extract the JWT token
+        if not auth_header.startswith('Bearer '):
+            logger.warning("test_jwt_endpoint(): Invalid Authorization header format")
+            raise HTTPException(status_code=401, detail="Invalid Authorization header format")
+
+        jwt_token = auth_header.replace('Bearer ', '')
+        
+        # Log the JWT token (be careful with this in production!)
+        logger.info(f"test_jwt_endpoint(): Received JWT token: {jwt_token}")
+
+        return {
+            "message": "JWT received and logged",
+            "token_length": len(jwt_token)
+        }
+
+    except Exception as e:
+        logger.exception(f"test_jwt_endpoint(): Error processing JWT: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Add the test router to the app (add this before app.include_router(router))
+app.include_router(test_router)
 
 # Include router in app
 app.include_router(router)
