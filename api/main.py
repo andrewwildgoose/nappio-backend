@@ -261,8 +261,8 @@ async def stripe_webhook(request: Request):
             created=datetime.fromtimestamp(event.created)
         )
         
-        # # Log the event type
-        # logger.info(f"stripe_webhook(): Event type: {event.type}")
+        # Log the event type
+        logger.info(f"stripe_webhook(): Event type: {event.type}")
         # # Log the event data
         # logger.debug(f"stripe_webhook(): Event data: {event.data}")
 

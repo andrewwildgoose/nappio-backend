@@ -36,6 +36,23 @@ def create_stripe_checkout_session(
     Creates a Stripe checkout session for subscription.
     """
     try:
+
+        # Log the incoming price ID and strip any whitespace
+        price_id = request.priceId.strip()
+        logger.debug(f"Attempting to create checkout with price_id: '{price_id}'")
+        
+        # List all prices first to verify our API connection
+        all_prices = stripe.Price.list(limit=5)
+        logger.debug(f"Available prices: {[p.id for p in all_prices.data]}")
+
+        # Try to retrieve the specific price
+        try:
+            price = stripe.Price.retrieve(price_id)
+            logger.debug(f"Successfully retrieved price: {price.id}")
+        except stripe.error.StripeError as e:
+            logger.error(f"Failed to retrieve price '{price_id}': {str(e)}")
+            raise
+
         logger.info(f"create_stripe_checkout_session(): Creating checkout session for user {user.id} with price ID {request.priceId}")
         # Create checkout session
 
@@ -97,8 +114,22 @@ def get_subscription_details(session_id: str) -> SubscriptionDetailsResponse:
         # Retrieve the session and subscription details
         session = stripe.checkout.Session.retrieve(session_id)
         subscription = stripe.Subscription.retrieve(session.subscription)
-        price = stripe.Price.retrieve(subscription.items.data[0].price.id)
-        product = stripe.Product.retrieve(price.product)
+
+        # Access items directly
+        subscription_items = subscription['items']
+
+        logger.debug(f'Subscription items: {subscription_items}')
+
+        if 'data' in subscription_items and subscription_items['data']:
+            first_item = subscription_items['data'][0]
+            if 'price' in first_item and 'id' in first_item['price']:
+                price = stripe.Price.retrieve(first_item['price']['id'])
+                product = stripe.Product.retrieve(price.product)
+            else:
+                logger.error("Price information not found in subscription item")
+        else:
+            logger.error("No subscription items found")
+
         
         logger.info(f"get_subscription_details(): Subscription details fetched for session ID {session_id}")
         

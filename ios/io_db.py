@@ -146,7 +146,6 @@ def insert_user_subscription(
     subscribed_at: datetime,
     last_payment_date: Optional[datetime] = None,
     next_payment_date: Optional[datetime] = None,
-    cancelled_at: Optional[datetime] = None
 ) -> dict:
     """
     Insert a new user subscription into the database
@@ -157,8 +156,8 @@ def insert_user_subscription(
         plan_id: Subscription plan ID
         status: Subscription status
         subscribed_at: Subscription start timestamp
-        cancelled_at: Optional cancellation timestamp
-        
+        last_payment_date: Last payment date (optional)
+        next_payment_date: Next payment date (optional)        
     Returns:
         dict: The inserted subscription data
         
@@ -192,7 +191,7 @@ def insert_user_subscription(
             "last_payment_date": last_payment_date.isoformat() if last_payment_date else None,
             #TODO: DATES NOT POPULATING
             "next_payment_date": next_payment_date.isoformat() if next_payment_date else None,
-            "cancelled_at": cancelled_at.isoformat() if cancelled_at else None
+            "cancelled_at": None
         }).execute()
         
         logger.debug(f"insert_user_subscription(): Inserted data: {response.data}")
@@ -213,7 +212,7 @@ def update_user_subscription(
 ) -> dict:
     """Update an existing user subscription"""
     try:
-        logger.debug(f"update_user_subscription(): Updating subscription for user {user_id} to status {status}")
+        logger.debug(f"update_user_subscription(): Updating subscription for to status {status}")
 
         # Prepare data to update
         data = {"status": status}
