@@ -13,6 +13,7 @@ logger = logging.getLogger('uvicorn.error')
 
 class CheckoutSessionRequest(BaseModel):
     priceId: str
+    cancelUrl: Optional[str] = '/'
     # userId: str
 
 class CheckoutSessionResponse(BaseModel):
@@ -22,9 +23,17 @@ class CheckoutSessionResponse(BaseModel):
 class SubscriptionDetailsRequest(BaseModel):
     session_id: str
 
+class SubscriptionSimpleResponse(BaseModel):
+    plan_name: str
+    customer_email: str
+
 class SubscriptionDetailsResponse(BaseModel):
     plan_name: str
     customer_email: str
+    subscription_id: str
+    status: str
+    start_date: datetime
+    end_date: Optional[datetime] = None
 
 def create_stripe_checkout_session(
     supabase: Client,
@@ -66,7 +75,7 @@ def create_stripe_checkout_session(
             line_items=[{"price": request.priceId, "quantity": 1}],
             mode="subscription",
             success_url=f"{frontend_url}/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{frontend_url}/cancel",
+            cancel_url=f"{frontend_url}{request.cancelUrl}",
             metadata={
                 "user_id": user.id,
             }
@@ -98,7 +107,7 @@ def create_stripe_checkout_session(
         logger.error(f"Error creating checkout session: {str(e)}")
         raise
 
-def get_subscription_details(session_id: str) -> SubscriptionDetailsResponse:
+def get_subscription_details(session_id: str) -> SubscriptionSimpleResponse:
     """
     Fetch subscription details from a completed checkout session
     
@@ -106,7 +115,7 @@ def get_subscription_details(session_id: str) -> SubscriptionDetailsResponse:
         session_id: Stripe checkout session ID
         
     Returns:
-        SubscriptionDetailsResponse with plan and customer details
+        SubscriptionSimpleResponse with plan and customer details
     """
     try:
         logger.info(f"get_subscription_details(): Fetching subscription details for session ID {session_id}")
@@ -133,7 +142,7 @@ def get_subscription_details(session_id: str) -> SubscriptionDetailsResponse:
         
         logger.info(f"get_subscription_details(): Subscription details fetched for session ID {session_id}")
         
-        return SubscriptionDetailsResponse(
+        return SubscriptionSimpleResponse(
             plan_name=product.name,
             customer_email=session.customer_details.email
         )

@@ -23,6 +23,18 @@ class EmailVerificationRequest(BaseModel):
 class EmailVerificationResponse(BaseModel):
     message: str
 
+class UserAddress(BaseModel):
+    id: Optional[UUID] = None
+    user_id: UUID
+    address_line_1: str
+    address_line_2: Optional[str] = None
+    city: str
+    postcode: str
+    country: str
+    address_notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
 def insert_newsletter_subscriber(supabase, subscriber: NewsletterSubscriber) -> dict:
     """
     Insert a new newsletter subscriber into the database
@@ -236,4 +248,102 @@ def update_user_subscription(
         
     except Exception as e:
         logger.error(f"update_user_subscription(): Failed to update subscription: {str(e)}")
+        raise
+
+def get_user_subscriptions(supabase, user_id):
+    """
+    Retrieve all subscriptions for a given user ID
+    """
+    try:
+        logger.debug(f"get_user_subscriptions(): Retrieving subscriptions for user ID {user_id}")
+        
+        response = supabase.table('user_subscriptions').select('*').eq('user_id', user_id).execute()
+        
+        if response.data:
+            logger.info(f"get_user_subscriptions(): Found {len(response.data)} subscriptions for user ID {user_id}")
+        else:
+            logger.warning(f"get_user_subscriptions(): No subscriptions found for user ID {user_id}")
+        
+        return response.data if response.data else []
+    except Exception as e:
+        logger.error(f"get_user_subscriptions(): Error retrieving subscriptions for user ID {user_id}: {str(e)}")
+        raise Exception(f"Error retrieving subscriptions for user ID {user_id}: {str(e)}")
+    
+
+def insert_user_address(
+        supabase: Client,
+        user_id: UUID,
+        address_line_1: str,
+        city: str,
+        postcode: str,
+        country: str,
+        address_line_2: Optional[str] = None,
+        address_notes: Optional[str] = None,
+    ):
+
+    """
+    Insert a new user address into the database
+    """
+    try:
+        response = supabase.table('user_addresses').insert({
+            "user_id": user_id,
+            "address_line_1": address_line_1,
+            "address_line_2": address_line_2,
+            "city": city,
+            "postcode": postcode,
+            "country": country,
+            "address_notes": address_notes
+        }).execute()
+
+        logger.debug(f"insert_user_address(): Inserted data: {response.data}")
+
+        return response.data[0] if response.data else None
+
+    except Exception as e:
+        logger.error(f"insert_user_address(): Failed to insert address: {str(e)}")
+        raise
+
+def get_user_addresses(supabase: Client, user_id: UUID) -> Optional[UserAddress]:
+    """
+    Retrieve all addresses for a given user ID
+    """
+    try:
+        response = supabase.table('user_addresses').select('*').eq('user_id', user_id).execute()
+        logger.debug(f"get_user_addresses(): Retrieved addresses for user {user_id}: {response.data}")
+
+        return [UserAddress(**addr) for addr in response.data] if response.data else []
+    except Exception as e:
+        logger.error(f"get_user_addresses(): Error fetching addresses for user {user_id}: {str(e)}")
+        raise
+
+def update_user_address(
+    supabase: Client,
+    user_id: UUID,
+    address_id: UUID,
+    address_line_1: str,
+    city: str,
+    postcode: str,
+    country: str,
+    address_line_2: Optional[str] = None,
+    address_notes: Optional[str] = None
+    ) -> Optional[UserAddress]:
+    """
+    Update an existing user address in the database
+    """
+    try:
+        response = supabase.table('user_addresses').update({
+            "address_line_1": address_line_1,
+            "address_line_2": address_line_2,
+            "city": city,
+            "postcode": postcode,
+            "country": country,
+            "address_notes": address_notes,
+        }).eq("id", address_id).execute()
+
+        logger.debug(f"update_user_address(): Updated data: {response.data}")
+
+        return response.data[0] if response.data else None
+
+    except Exception as e:
+        logger.error(f"update_user_address(): Failed to update address: {str(e)}")
         raise

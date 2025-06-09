@@ -15,10 +15,11 @@ from supabase import create_client, Client
 import stripe
 
 # Custom imports
-from ios.io_db import NewsletterSubscriber, EmailVerificationRequest, EmailVerificationResponse, insert_newsletter_subscriber, verify_newsletter_subscriber
+import ios.io_db as io_db
 from email_serv.email_processor import send_confirmation_email
-from payment_serv.payment_processor import CheckoutSessionRequest, CheckoutSessionResponse, SubscriptionDetailsRequest, SubscriptionDetailsResponse, create_stripe_checkout_session, get_subscription_details
+from payment_serv.payment_processor import CheckoutSessionRequest, CheckoutSessionResponse, SubscriptionDetailsRequest, SubscriptionSimpleResponse, create_stripe_checkout_session, get_subscription_details
 from payment_serv.webhook_handlers import WebhookEvent, webhook_router
+import user_serv.user_service as user_service
 
 # Set up logging
 logger = logging.getLogger('uvicorn.error')
@@ -45,6 +46,11 @@ router = APIRouter(
 payment_router = APIRouter(
     prefix="/api/v1",
     tags=["payments"]
+)
+
+user_router = APIRouter(
+    prefix="/api/v1/user",
+    tags=["users"]
 )
 
 # Frontend URL
@@ -90,8 +96,8 @@ async def root():
     }
 
 # Newsletter routes
-@router.post("/newsletter/subscribe", response_model=NewsletterSubscriber)
-def subscribe_to_newsletter(subscriber: NewsletterSubscriber):
+@router.post("/newsletter/subscribe", response_model=io_db.NewsletterSubscriber)
+def subscribe_to_newsletter(subscriber: io_db.NewsletterSubscriber):
     """
     Handle newsletter subscription requests
     """
@@ -99,14 +105,14 @@ def subscribe_to_newsletter(subscriber: NewsletterSubscriber):
         logger.debug(f'Received subscriber data: {subscriber.model_dump()}')
         
         # Insert subscriber into the database
-        result = insert_newsletter_subscriber(supabase, subscriber)
+        result = io_db.insert_newsletter_subscriber(supabase, subscriber)
         if not result:
             logger.error("subscribe_to_newsletter(): Failed to subscribe")
             raise HTTPException(status_code=400, detail="Failed to subscribe")
         
         # Generate a confirmation link
         #TODO: this causes a double forward slash in the URL, fix it
-        confirmation_link = f"{FRONTEND_URL}confirm-email?email={subscriber.email}"
+        confirmation_link = f"{FRONTEND_URL}/confirm-email?email={subscriber.email}"
         logger.debug(f"Generated confirmation link: {confirmation_link}")
         
         # Send confirmation email
@@ -127,15 +133,15 @@ def subscribe_to_newsletter(subscriber: NewsletterSubscriber):
         logger.exception(f"subscribe_to_newsletter(): Error subscribing to newsletter: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/newsletter/verify", response_model=EmailVerificationResponse)
-def verify_subscriber_email(request: EmailVerificationRequest):
+@router.post("/newsletter/verify", response_model=io_db.EmailVerificationResponse)
+def verify_subscriber_email(request: io_db.EmailVerificationRequest):
     """
     Handle email verification requests
     """
     try:
         email = request.email
         logger.debug(f"Received email verification request for: {email}")
-        verified = verify_newsletter_subscriber(supabase, request)
+        verified = io_db.verify_newsletter_subscriber(supabase, request)
         if verified:
             return {"message": f"Email {email} verified successfully."}
         else:
@@ -179,6 +185,75 @@ async def get_authenticated_user(request: Request):
         logger.exception(f"get_authenticated_user(): Error getting user: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
+# User routes
+@user_router.get("/user-subscriptions", response_model=list[user_service.SubscriptionDetailsResponse])
+async def get_user_subscriptions(user = Depends(get_authenticated_user)):
+    """
+    Get a list of subscriptions for the authenticated user
+    """
+    try:
+        logger.debug(f"get_user_subscriptions(): Authenticated user: {user}")
+        subscriptions = user_service.get_user_subscriptions(supabase, user.id)
+        logger.debug(f"get_user_subscriptions(): Found subscriptions: {subscriptions}")
+        return subscriptions
+    except Exception as e:
+        logger.error(f"Error getting user subscriptions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@user_router.get("/user-addresses", response_model=list[io_db.UserAddress])
+async def get_user_addresses(user = Depends(get_authenticated_user)):
+    """
+    Get a list of addresses for the authenticated user
+    Args:
+        user: Authenticated user object from Supabase (injected by dependency)
+
+    Returns:
+        List[UserAddress]: List of addresses associated with the user (empty list if none found)
+    """
+    try:
+        logger.debug(f"get_user_addresses(): Authenticated user: {user}")
+        addresses = user_service.get_user_addresses(supabase, user.id)
+        
+        if not addresses:
+            logger.info(f"get_user_addresses(): No addresses found for user {user.id}")
+            return []
+            
+        logger.debug(f"get_user_addresses(): Found {len(addresses)} addresses")
+        return addresses
+        
+    except Exception as e:
+        logger.error(f"Error getting user addresses: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@user_router.post("/update-user-address", response_model=io_db.UserAddress)
+async def update_user_address(
+    address: user_service.UserAddressRequest,
+    user = Depends(get_authenticated_user)
+):
+    """
+    Update the address for the authenticated user
+    Args:
+        address: UserAddress object containing new address details
+        user: Authenticated user object from Supabase (injected by dependency)
+
+    Returns:
+        UserAddress: Updated address details
+    """
+    try:
+        logger.debug(f"update_user_address(): Authenticated user: {user}")
+        logger.debug(f"update_user_address(): Received address: {address.model_dump()}")
+        result = user_service.update_user_address(
+            supabase=supabase,
+            user_id=user.id,
+            address=address
+        )
+        logger.debug(f"update_user_address(): Updated address: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"Error updating user address: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Stripe checkout session creation
 @payment_router.post("/create-checkout", response_model=CheckoutSessionResponse)
 async def create_checkout_session(
@@ -207,7 +282,7 @@ async def create_checkout_session(
             supabase=supabase,
             request=request,
             user=user,
-            frontend_url=FRONTEND_URL
+            frontend_url=FRONTEND_URL,
         )
 
         logger.debug(f"create_checkout_session(): Created session: {result}")
@@ -222,8 +297,8 @@ async def create_checkout_session(
         raise HTTPException(status_code=500, detail=str(e))
     
 # Get a user's subscription details
-@payment_router.post("/subscription-details", response_model=SubscriptionDetailsResponse)
-async def get_session_details(
+@payment_router.post("/subscription-details", response_model=SubscriptionSimpleResponse)
+async def get_subscription_details(
     request: SubscriptionDetailsRequest,
     user = Depends(get_authenticated_user)
 ):
@@ -231,7 +306,7 @@ async def get_session_details(
     Fetch details for a successful subscription
     """
     try:
-        logger.debug(f"get_session_details(): Received request: {request.model_dump()}")
+        logger.debug(f"get_subscription_details(): Received request: {request.model_dump()}")
         # Validate session ID
         return get_subscription_details(request.session_id)
     except Exception as e:
@@ -246,9 +321,7 @@ async def stripe_webhook(request: Request):
     sig_header = request.headers.get('stripe-signature')
     
     try:
-        # logger.debug(f"stripe_webhook(): Received payload: {payload.decode()}")
-        # logger.debug(f"stripe_webhook(): Received signature header: {sig_header}")
-        # Verify webhook signature
+        
         event = stripe.Webhook.construct_event(
             payload, sig_header, os.environ.get('STRIPE_WEBHOOK_SECRET')
         )
@@ -263,8 +336,7 @@ async def stripe_webhook(request: Request):
         
         # Log the event type
         logger.info(f"stripe_webhook(): Event type: {event.type}")
-        # # Log the event data
-        # logger.debug(f"stripe_webhook(): Event data: {event.data}")
+
 
         # Route the event to the appropriate handler
         webhook_router(webhook_event, supabase)
@@ -324,7 +396,8 @@ app.include_router(test_router)
 # Include router in app
 app.include_router(router)
 app.include_router(payment_router)
+app.include_router(user_router)
 
 # Run the app
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="trace", reload=True)
