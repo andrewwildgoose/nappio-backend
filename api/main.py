@@ -225,34 +225,87 @@ async def get_user_addresses(user = Depends(get_authenticated_user)):
         logger.error(f"Error getting user addresses: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@user_router.post("/update-user-address", response_model=io_db.UserAddress)
-async def update_user_address(
-    address: user_service.UserAddressRequest,
+@user_router.post("/add-address", response_model=user_service.AddUserAddressResponse)
+async def add_user_address(
+    request: user_service.AddUserAddressRequest,
     user = Depends(get_authenticated_user)
 ):
     """
-    Update the address for the authenticated user
+    Add a new address for the authenticated user
     Args:
-        address: UserAddress object containing new address details
+        request: AddAddressRequest containing address details
         user: Authenticated user object from Supabase (injected by dependency)
-
     Returns:
-        UserAddress: Updated address details
+        UserAddress: The newly created address object
     """
     try:
-        logger.debug(f"update_user_address(): Authenticated user: {user}")
-        logger.debug(f"update_user_address(): Received address: {address.model_dump()}")
-        result = user_service.update_user_address(
-            supabase=supabase,
-            user_id=user.id,
-            address=address
-        )
-        logger.debug(f"update_user_address(): Updated address: {result}")
-        return result
+        logger.debug(f"add_user_address(): Received request: {request.model_dump()}")
+        address = user_service.add_user_address(supabase, request, user.id)
+        logger.debug(f"add_user_address(): Created address: {address}")
+        return address
     except Exception as e:
-        logger.error(f"Error updating user address: {str(e)}")
+        logger.error(f"Error adding user address: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@user_router.delete("/delete-address/{address_id}", response_model=user_service.DeleteAddressResponse)
+async def delete_user_address(
+    address_id: str,
+    user = Depends(get_authenticated_user)
+):
+    """
+    Delete a user's address by ID
+    Args:
+        address_id: UUID of the address to delete (from URL path)
+        user: Authenticated user object from Supabase (injected by dependency)
+    Returns:
+        DeleteAddressResponse: Confirmation of address deletion
+    """
+    try:
+        logger.debug(f"delete_user_address(): Attempting to delete address {address_id} for user {user.id}")
+        success = user_service.delete_user_address(supabase, address_id, user.id)
+        
+        if success:
+            return {"message": "Address deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Address not found")
+            
+    except Exception as e:
+        logger.error(f"Error deleting address: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@user_router.post("/assign-subscription-address", response_model=dict)
+async def assign_subscription_address(
+    request: user_service.AssignSubscriptionAddressRequest,
+    user = Depends(get_authenticated_user)
+):
+    try:
+        logger.debug(f"assign_subscription_address(): Assigning address {request.address_id} to subscription {request.subscription_id}")
+        result = user_service.assign_subscription_address(
+            supabase=supabase,
+            user_id=user.id,
+            subscription_id=request.subscription_id,
+            address_id=request.address_id
+        )
+        
+        # Convert UUID to string in the response
+        response_data = {
+            "subscription_id": result.get("subscription_id"),
+            "address_id": result.get("address_id"),  # Convert UUID to string
+            "is_active": result.get("is_active"),
+            "created_at": result.get("created_at")
+        }
+        
+        return {
+            "message": "Address assigned successfully", 
+            "data": response_data
+        }
+        
+    except ValueError as e:
+        logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error assigning address to subscription: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Stripe checkout session creation
 @payment_router.post("/create-checkout", response_model=CheckoutSessionResponse)

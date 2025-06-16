@@ -316,34 +316,15 @@ def get_user_addresses(supabase: Client, user_id: UUID) -> Optional[UserAddress]
         logger.error(f"get_user_addresses(): Error fetching addresses for user {user_id}: {str(e)}")
         raise
 
-def update_user_address(
-    supabase: Client,
-    user_id: UUID,
-    address_id: UUID,
-    address_line_1: str,
-    city: str,
-    postcode: str,
-    country: str,
-    address_line_2: Optional[str] = None,
-    address_notes: Optional[str] = None
-    ) -> Optional[UserAddress]:
+def delete_user_address(supabase: Client, address_id: UUID) -> bool:
     """
-    Update an existing user address in the database
+    Delete a user address by its ID
     """
     try:
-        response = supabase.table('user_addresses').update({
-            "address_line_1": address_line_1,
-            "address_line_2": address_line_2,
-            "city": city,
-            "postcode": postcode,
-            "country": country,
-            "address_notes": address_notes,
-        }).eq("id", address_id).execute()
+        response = supabase.table('user_addresses').delete().eq('id', address_id).execute()
+        logger.debug(f"delete_user_address(): Deleted address with ID {address_id}: {response.data}")
 
-        logger.debug(f"update_user_address(): Updated data: {response.data}")
-
-        return response.data[0] if response.data else None
-
+        return response.data is not None and len(response.data) > 0
     except Exception as e:
-        logger.error(f"update_user_address(): Failed to update address: {str(e)}")
+        logger.error(f"delete_user_address(): Error deleting address with ID {address_id}: {str(e)}")
         raise
