@@ -67,7 +67,7 @@ def handle_subscription_created(webhook_event: WebhookEvent, supabase: Client) -
         logger.info(f"Handling customer.subscription.created for subscription ID: {webhook_event.data['object']['id']}")
         subscription = stripe.Subscription.retrieve(webhook_event.data['object']['id'])
         
-        logger.debug(f'Plan ID: {subscription["items"]["data"][0]["price"]["metadata"]["plan_id"]}')
+        #logger.debug(f'Plan ID: {subscription["items"]["data"][0]["price"]["metadata"]["plan_id"]}')
         logger.debug(f'Customer ID: {subscription.customer}') 
         logger.debug(f'Subscription ID: {subscription.id}')
         logger.debug(f'Subscription Status: {subscription.status}')
@@ -82,10 +82,18 @@ def handle_subscription_created(webhook_event: WebhookEvent, supabase: Client) -
             raise Exception("User ID not found in checkout session")
         user_id = user_id_response.data[0]['user_id']
 
+        # Get the plan id from the subscriptions table in supabase
+        plan_id_response = supabase.table('subscription_plans').select('id').eq('stripe_price_id', subscription['items']['data'][0]['price']['id']).execute()
+        if not plan_id_response.data:
+            raise Exception("Plan ID not found for the given price ID")
+        plan_id = plan_id_response.data[0]['id']
+
+        logger.debug(f"Plan ID: {plan_id}")
+
         # Create subscription record
         insert_user_subscription(
             supabase=supabase,
-            plan_id=subscription['items']['data'][0]['price']['metadata']['plan_id'],
+            plan_id=plan_id,
             subscription_id=subscription.id,
             price_id=subscription['items']['data'][0]['price']['id'],
             customer_id=subscription.customer,

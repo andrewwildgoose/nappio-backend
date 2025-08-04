@@ -351,7 +351,7 @@ async def create_checkout_session(
     
 # Get a user's subscription details
 @payment_router.post("/subscription-details", response_model=SubscriptionSimpleResponse)
-async def get_subscription_details(
+def get_subscription_details_route(
     request: SubscriptionDetailsRequest,
     user = Depends(get_authenticated_user)
 ):
