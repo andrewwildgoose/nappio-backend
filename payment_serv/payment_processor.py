@@ -13,6 +13,7 @@ logger = logging.getLogger('uvicorn.error')
 
 class CheckoutSessionRequest(BaseModel):
     priceId: str
+    addressId: str
     cancelUrl: Optional[str] = '/'
     # userId: str
 
@@ -78,6 +79,7 @@ def create_stripe_checkout_session(
             cancel_url=f"{frontend_url}{request.cancelUrl}",
             metadata={
                 "user_id": user.id,
+                "address_id": request.addressId,
             }
         )
 

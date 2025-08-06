@@ -25,7 +25,7 @@ class EmailVerificationResponse(BaseModel):
 
 class UserAddress(BaseModel):
     id: Optional[UUID] = None
-    user_id: UUID
+    user_id: str
     address_line_1: str
     address_line_2: Optional[str] = None
     city: str
@@ -268,34 +268,27 @@ def get_user_subscriptions(supabase, user_id):
     except Exception as e:
         logger.error(f"get_user_subscriptions(): Error retrieving subscriptions for user ID {user_id}: {str(e)}")
         raise Exception(f"Error retrieving subscriptions for user ID {user_id}: {str(e)}")
-    
 
 def insert_user_address(
         supabase: Client,
-        user_id: UUID,
-        address_line_1: str,
-        city: str,
-        postcode: str,
-        country: str,
-        address_line_2: Optional[str] = None,
-        address_notes: Optional[str] = None,
-    ):
+        new_address: UserAddress
+) -> Optional[UserAddress]:
 
     """
     Insert a new user address into the database
     """
     try:
         response = supabase.table('user_addresses').insert({
-            "user_id": user_id,
-            "address_line_1": address_line_1,
-            "address_line_2": address_line_2,
-            "city": city,
-            "postcode": postcode,
-            "country": country,
-            "address_notes": address_notes
+            "user_id": new_address.user_id,
+            "address_line_1": new_address.address_line_1,
+            "address_line_2": new_address.address_line_2,
+            "city": new_address.city,
+            "postcode": new_address.postcode,
+            "country": new_address.country,
+            "address_notes": new_address.address_notes
         }).execute()
 
-        logger.debug(f"insert_user_address(): Inserted data: {response.data}")
+        logger.debug(f"insert_user_address(): Inserted data: {response}")
 
         return response.data[0] if response.data else None
 

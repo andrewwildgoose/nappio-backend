@@ -49,7 +49,7 @@ def handle_checkout_completed(event: WebhookEvent, supabase: Client) -> None:
 
         # Retrieve the session and subscription details
         session = stripe.checkout.Session.retrieve(event.data['object'].id)
-        
+                
         update_checkout_session(
             supabase=supabase,
             session_id=session.id,

@@ -129,7 +129,7 @@ def get_user_addresses(supabase: Client, user_id: str) -> List[io_db.UserAddress
         logger.error(f"get_user_addresses(): Error fetching addresses for user {user_id}: {str(e)}")
         raise
 
-def add_user_address(supabase: Client, address_request: AddUserAddressRequest) -> io_db.UserAddress:
+def add_user_address(supabase: Client, address_request: AddUserAddressRequest, user_id: str) -> io_db.UserAddress:
     """
     Add a new address for a user to the database
 
@@ -143,18 +143,26 @@ def add_user_address(supabase: Client, address_request: AddUserAddressRequest) -
     try:
         # Prepare data for insertion
         address_data = address_request.model_dump(exclude_unset=True)
-        response = supabase.table('user_addresses').insert(address_data).execute()
+        address_data['user_id'] = str(user_id)  # Ensure user_id is set
 
-        if response.status_code == 201:
-            new_address = io_db.UserAddress(**response.data[0])
-            logger.debug(f"add_user_address(): Successfully added address {new_address.id} for user {address_request.user_id}")
-            return new_address
-        else:
-            logger.error(f"add_user_address(): Failed to add address, status code: {response.status_code}")
+
+        try:
+            new_address = io_db.UserAddress(**address_data)
+            response = io_db.insert_user_address(supabase, new_address)
+            logger.debug(f"add_user_address(): Inserted address data: {response}")
+            address_response = AddUserAddressResponse(
+                success=True,
+                message="Address added successfully.",
+                address=response if response else None
+            )
+            logger.debug(f"add_user_address(): Successfully added address {new_address.id} for user {user_id}")
+            return address_response
+        except Exception as e:
+            logger.error(f"add_user_address(): Failed to add address: {str(e)}")
             raise Exception("Failed to add address.")
 
     except Exception as e:
-        logger.error(f"add_user_address(): Error adding address for user {address_request.user_id}: {str(e)}")
+        logger.error(f"add_user_address(): Error adding address for user {user_id}: {str(e)}")
         raise
 
 def delete_user_address(supabase: Client, address_id: UUID, user_id: UUID) -> DeleteAddressResponse:
