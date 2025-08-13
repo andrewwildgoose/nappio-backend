@@ -21,4 +21,4 @@ services:
       - key: SERVICE_NAME
         value: Nappio
       - key: FRONTEND_URL
-        value: https://nappio-dev.netlify.app/
+        value: https://nappiosubscriptiontest.netlify.app/
