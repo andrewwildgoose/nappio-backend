@@ -20,6 +20,7 @@ from datetime import datetime
 import stripe
 from supabase import Client
 from ios.io_db import insert_user_subscription, update_user_subscription, update_checkout_session
+from user_serv.user_service import assign_subscription_address
 from email_serv.email_processor import send_new_subscription_email
 
 logger = logging.getLogger('uvicorn.error')
@@ -46,6 +47,7 @@ def handle_checkout_completed(event: WebhookEvent, supabase: Client) -> None:
     """Handle successful checkout completion"""
     try:
         logger.info(f"Handling checkout.session.completed for session ID: {event.data['object']['id']}")
+        logger.debug(f"Session metadata: {event.data['object']['metadata']}")
 
         # Retrieve the session and subscription details
         session = stripe.checkout.Session.retrieve(event.data['object'].id)
@@ -53,8 +55,10 @@ def handle_checkout_completed(event: WebhookEvent, supabase: Client) -> None:
         update_checkout_session(
             supabase=supabase,
             session_id=session.id,
-            status=session.status
+            status=session.status,
+            address_id=session.metadata.get('address_id'),
         )
+            
         logger.info(f"Updated checkout session status to {session.status} for session ID: {session.id}")
         
     except Exception as e:
@@ -76,11 +80,15 @@ def handle_subscription_created(webhook_event: WebhookEvent, supabase: Client) -
         logger.debug(f'Subscription Items: {subscription["items"]["data"]}')
 
         # Get the supabase user from the checkout session
-        user_id_response = supabase.table('checkout_sessions').select('user_id').eq('customer_id', subscription.customer).execute()
-        
-        if not user_id_response.data:
+        checkout_session_response = supabase.table('checkout_sessions').select('user_id', 'address_id').eq('customer_id', subscription.customer).execute()
+
+        if not checkout_session_response.data:
             raise Exception("User ID not found in checkout session")
-        user_id = user_id_response.data[0]['user_id']
+        user_id = checkout_session_response.data[0]['user_id']
+        address_id = checkout_session_response.data[0]['address_id']
+
+        logger.debug(f"SUBCRIPTION CREATED - User ID: {user_id}")
+        logger.debug(f"SUBCRIPTION CREATED - Address ID: {address_id}")
 
         # Get the plan id from the subscriptions table in supabase
         plan_id_response = supabase.table('subscription_plans').select('id').eq('stripe_price_id', subscription['items']['data'][0]['price']['id']).execute()
@@ -98,6 +106,7 @@ def handle_subscription_created(webhook_event: WebhookEvent, supabase: Client) -
             price_id=subscription['items']['data'][0]['price']['id'],
             customer_id=subscription.customer,
             status=subscription.status,
+            address_id=address_id,
             subscribed_at=datetime.fromtimestamp(subscription.created),
             last_payment_date=datetime.fromtimestamp(subscription['items']['data'][0]['current_period_start']),
             next_payment_date=datetime.fromtimestamp(subscription['items']['data'][0]['current_period_end']),

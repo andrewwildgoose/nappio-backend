@@ -129,7 +129,8 @@ def insert_checkout_session(
 def update_checkout_session(
     supabase: Client,
     session_id: str,
-    status: str
+    status: str,
+    address_id: Optional[str] = None
 ) -> dict:
     """Update an existing checkout session"""
     try:
@@ -137,7 +138,8 @@ def update_checkout_session(
 
         # Prepare data to update
         response = supabase.table('checkout_sessions').update({
-            "status": status
+            "status": status,
+            "address_id": address_id
         }).eq("session_id", session_id).execute()
 
         logger.debug(f"update_checkout_session(): Updated data: {response.data}")
@@ -156,6 +158,7 @@ def insert_user_subscription(
     subscription_id: str,
     status: str,
     subscribed_at: datetime,
+    address_id: str,
     last_payment_date: Optional[datetime] = None,
     next_payment_date: Optional[datetime] = None,
 ) -> dict:
@@ -168,6 +171,7 @@ def insert_user_subscription(
         plan_id: Subscription plan ID
         status: Subscription status
         subscribed_at: Subscription start timestamp
+        address_id: Subscription address ID
         last_payment_date: Last payment date (optional)
         next_payment_date: Next payment date (optional)        
     Returns:
@@ -199,9 +203,8 @@ def insert_user_subscription(
             "subscription_id": subscription_id,
             "status": status,
             "subscribed_at": subscribed_at.isoformat(),
-            #TODO: DATES NOT POPULATING
+            "address_id": address_id,
             "last_payment_date": last_payment_date.isoformat() if last_payment_date else None,
-            #TODO: DATES NOT POPULATING
             "next_payment_date": next_payment_date.isoformat() if next_payment_date else None,
             "cancelled_at": None
         }).execute()
