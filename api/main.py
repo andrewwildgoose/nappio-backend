@@ -374,7 +374,7 @@ async def stripe_webhook(request: Request):
     sig_header = request.headers.get('stripe-signature')
     
     try:
-        
+        # Verify webhook signature
         event = stripe.Webhook.construct_event(
             payload, sig_header, os.environ.get('STRIPE_WEBHOOK_SECRET')
         )
@@ -392,7 +392,7 @@ async def stripe_webhook(request: Request):
 
 
         # Route the event to the appropriate handler
-        webhook_router(webhook_event, supabase)
+        await webhook_router(webhook_event, supabase)
             
         return {"status": "success"}
         

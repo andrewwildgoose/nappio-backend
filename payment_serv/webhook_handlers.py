@@ -1,49 +1,44 @@
-from pydantic import BaseModel
-from datetime import datetime
-from typing import Optional
-
-class WebhookEvent(BaseModel):
-    id: str
-    type: str
-    data: dict
-    created: datetime
-
-class SubscriptionWebhookData(BaseModel):
-    user_id: str
-    plan_id: str
-    status: str
-    subscribed_at: datetime
-    cancelled_at: Optional[datetime] = None
-
 import logging
-from datetime import datetime
 import stripe
+from datetime import datetime
+from models.payment_models import WebhookEvent
 from supabase import Client
+from product_serv import stripe_product_sync as sps
 from ios.io_db import insert_user_subscription, update_user_subscription, update_checkout_session
 from user_serv.user_service import assign_subscription_address
 from email_serv.email_processor import send_new_subscription_email
 
 logger = logging.getLogger('uvicorn.error')
 
-def webhook_router(event: WebhookEvent, supabase: Client) -> None:
+async def webhook_router(event: WebhookEvent, supabase: Client) -> None:
     """Route webhook events to appropriate handlers"""
     try:
         logger.info("Webhook event received in webhook_router()")
-        if event.type == "checkout.session.completed":
-            handle_checkout_completed(event, supabase)
+        if event.type == 'product.created':
+            await sps.handle_product_created(event, supabase)
+        elif event.type == 'product.updated':
+            await sps.handle_product_updated(event, supabase)
+        elif event.type == 'product.deleted':
+            await sps.handle_product_deleted(event, supabase)
+        elif event.type == 'price.created':
+            await sps.handle_price_created(event, supabase)
+        elif event.type == 'price.updated':
+            await sps.handle_price_updated(event, supabase)
+        elif event.type == "checkout.session.completed":
+            await handle_checkout_completed(event, supabase)
         elif event.type == "customer.subscription.created":
-            handle_subscription_created(event, supabase)
+            await handle_subscription_created(event, supabase)
         elif event.type == "customer.subscription.updated":
-            handle_subscription_updated(event, supabase)
+            await handle_subscription_updated(event, supabase)
         elif event.type == "customer.subscription.deleted":
-            handle_subscription_updated(event, supabase)
+            await handle_subscription_updated(event, supabase)
         else:
             logger.warning(f"Unhandled event type: {event.type}")
     except Exception as e:
         logger.error(f"Error processing webhook event: {str(e)}")
         raise
 
-def handle_checkout_completed(event: WebhookEvent, supabase: Client) -> None:
+async def handle_checkout_completed(event: WebhookEvent, supabase: Client) -> None:
     """Handle successful checkout completion"""
     try:
         logger.info(f"Handling checkout.session.completed for session ID: {event.data['object']['id']}")
@@ -65,7 +60,7 @@ def handle_checkout_completed(event: WebhookEvent, supabase: Client) -> None:
         logger.error(f"Error handling checkout.session.completed: {str(e)}")
         raise
 
-def handle_subscription_created(webhook_event: WebhookEvent, supabase: Client) -> None:
+async def handle_subscription_created(webhook_event: WebhookEvent, supabase: Client) -> None:
     """Handle subscription creation"""
     try:
         logger.info(f"Handling customer.subscription.created for subscription ID: {webhook_event.data['object']['id']}")
@@ -152,7 +147,7 @@ def handle_subscription_created(webhook_event: WebhookEvent, supabase: Client) -
         logger.error(f"Error handling customer.subscription.created: {str(e)}")
         raise
 
-def handle_subscription_updated(event: WebhookEvent, supabase: Client) -> None:
+async def handle_subscription_updated(event: WebhookEvent, supabase: Client) -> None:
     """Handle subscription updates"""
     try:
         logger.info(f"Handling customer.subscription.updated for subscription ID: {event.data['object']['id']}")
