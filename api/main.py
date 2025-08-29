@@ -16,8 +16,10 @@ import stripe
 
 # Custom imports
 import ios.io_db as io_db
+import product_serv.subscription_builder as sub_builder
 from email_serv.email_processor import send_confirmation_email
-from payment_serv.payment_processor import CheckoutSessionRequest, CheckoutSessionResponse, SubscriptionDetailsRequest, SubscriptionSimpleResponse, create_stripe_checkout_session, get_subscription_details
+from payment_serv.payment_processor import CheckoutSessionRequest, CheckoutSessionResponse, CreateSubscriptionRequest, SubscriptionDetailsRequest, SubscriptionSimpleResponse
+import payment_serv.payment_processor as pa
 from payment_serv.webhook_handlers import WebhookEvent, webhook_router
 import user_serv.user_service as user_service
 
@@ -331,7 +333,7 @@ async def create_checkout_session(
     try:
         logger.debug(f"create_checkout_session(): Received request: {request.model_dump()}")
         # Create checkout session using authenticated user
-        result = create_stripe_checkout_session(
+        result = pa.create_stripe_checkout_session(
             supabase=supabase,
             request=request,
             user=user,
@@ -349,6 +351,44 @@ async def create_checkout_session(
         logger.error(f"Error creating checkout session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     
+@payment_router.post("/create-subscription")
+async def create_subscription(
+    request: CreateSubscriptionRequest,
+    user = Depends(get_authenticated_user)
+):
+    """
+    Create a new subscription for the user
+    """
+    try:
+        logger.debug(f"create_subscription(): Received request: {request.model_dump()}")
+
+        subscription_items = sub_builder.build_subscription_items(supabase, request)
+
+        address_obj = user_service.AddUserAddressRequest(
+            address_line_1=request.address["address_line_1"],
+            address_line_2=request.address.get("address_line_2"),
+            city=request.address["city"],
+            postcode=request.address["postcode"],
+            country=request.address["country"],
+            address_notes=request.address.get("address_notes")
+        )
+
+        addressResponse = user_service.add_user_address(supabase, address_obj, user.id)
+
+        result = pa.create_stripe_subscription_checkout_session(
+            supabase=supabase,
+            line_items=subscription_items,
+            user=user,
+            address_id=addressResponse.address.id,
+            frontend_url=FRONTEND_URL,
+            cancel_url=request.cancelUrl
+        )
+
+        return result
+    except Exception as e:
+        logger.error(f"Error creating subscription: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Get a user's subscription details
 @payment_router.post("/subscription-details", response_model=SubscriptionSimpleResponse)
 def get_subscription_details_route(
@@ -361,7 +401,7 @@ def get_subscription_details_route(
     try:
         logger.debug(f"get_subscription_details(): Received request: {request.model_dump()}")
         # Validate session ID
-        return get_subscription_details(request.session_id)
+        return pa.get_subscription_details(request.session_id)
     except Exception as e:
         logger.error(f"Error getting subscription details: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

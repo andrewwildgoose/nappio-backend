@@ -35,6 +35,19 @@ class UserAddress(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+def get_stripe_price_ids(supabase: Client, product_ids: list[str]) -> list[str]:
+    """
+    Retrieve Stripe price IDs from the database that match the given product IDs.
+    """
+    try:
+        stripe_price_ids_dict = supabase.table('product').select('stripe_price_id').in_("id", product_ids).execute()
+        stripe_price_ids = [item['stripe_price_id'] for item in stripe_price_ids_dict.data if item.get('stripe_price_id')]
+        logger.debug(f"get_stripe_price_ids(): Retrieved price IDs: {stripe_price_ids}")
+        return stripe_price_ids
+    except Exception as e:
+        logger.error(f"get_stripe_price_ids(): Error retrieving price IDs: {str(e)}")
+        raise Exception(f"Error retrieving price IDs: {str(e)}")
+
 def insert_newsletter_subscriber(supabase, subscriber: NewsletterSubscriber) -> dict:
     """
     Insert a new newsletter subscriber into the database
@@ -81,13 +94,12 @@ def verify_newsletter_subscriber(supabase, verify_request: EmailVerificationRequ
         logger.error(f"verify_newsletter_subscriber(): Error verifying email {email}: {str(e)}")
         raise Exception(f"Error verifying email {email}: {str(e)}")
     
-
 def insert_checkout_session(
         supabase: Client, 
         session_id: str, 
         user_id: str,
         customer_id: str,
-        price_id: str, 
+        line_items: list[dict],
         status: str = "pending"
 ) -> dict:
     """
@@ -114,7 +126,7 @@ def insert_checkout_session(
             "session_id": session_id,
             "user_id": user_id,
             "customer_id": customer_id,
-            "price_id": price_id,
+            "line_items": line_items,
             "status": status
         }).execute()
         
@@ -152,13 +164,13 @@ def update_checkout_session(
 
 def insert_user_subscription(
     supabase: Client,
-    plan_id: str,
-    price_id: str,
     customer_id: str,
-    subscription_id: str,
+    stripe_subscription_id: str,
     status: str,
-    subscribed_at: datetime,
-    address_id: str,
+    address_id: Optional[UUID] = None,
+    baby_dob: Optional[datetime] = None,
+    baby_weight_at_start: Optional[float] = None,
+    subscribed_at: Optional[datetime] = None,
     last_payment_date: Optional[datetime] = None,
     next_payment_date: Optional[datetime] = None,
 ) -> dict:
@@ -167,13 +179,15 @@ def insert_user_subscription(
     
     Args:
         supabase: Supabase client instance
-        user_id: User ID from Supabase auth
-        plan_id: Subscription plan ID
-        status: Subscription status
-        subscribed_at: Subscription start timestamp
-        address_id: Subscription address ID
+        customer_id: Stripe customer ID
+        stripe_subscription_id: Stripe subscription ID
+        status: Subscription status ('pending', 'active', or 'cancelled')
+        address_id: UUID of the delivery address (optional)
+        baby_dob: Baby's date of birth (optional)
+        baby_weight_at_start: Baby's weight when starting subscription (optional)
+        subscribed_at: Subscription start timestamp (optional, defaults to now)
         last_payment_date: Last payment date (optional)
-        next_payment_date: Next payment date (optional)        
+        next_payment_date: Next payment date (optional)
     Returns:
         dict: The inserted subscription data
         
@@ -181,8 +195,6 @@ def insert_user_subscription(
         Exception: If database insertion fails
     """
     try:
-        
-
         # Get the supabase user from the checkout session
         user_id_response = supabase.table('checkout_sessions').select('user_id').eq('customer_id', customer_id).execute()
         
@@ -192,22 +204,27 @@ def insert_user_subscription(
 
         logger.debug(f"insert_user_subscription(): Retrieved user ID {user_id} from checkout session for customer {customer_id}")
         
-        logger.debug(f"insert_user_subscription(): Inserting subscription for user {user_id} with plan {plan_id}")
-        
         # Prepare data to insert
-        response = supabase.table('user_subscriptions').insert({
+        subscription_data = {
             "user_id": user_id,
-            "plan_id": plan_id,
-            "price_id": price_id,
             "customer_id": customer_id,
-            "subscription_id": subscription_id,
+            "stripe_subscription_id": stripe_subscription_id,
             "status": status,
-            "subscribed_at": subscribed_at.isoformat(),
-            "address_id": address_id,
+            "subscribed_at": subscribed_at.isoformat() if subscribed_at else None,
             "last_payment_date": last_payment_date.isoformat() if last_payment_date else None,
             "next_payment_date": next_payment_date.isoformat() if next_payment_date else None,
             "cancelled_at": None
-        }).execute()
+        }
+
+        # Add optional fields if they are provided
+        if address_id:
+            subscription_data["address_id"] = str(address_id)  # Convert UUID to string
+        if baby_dob:
+            subscription_data["baby_dob"] = baby_dob.isoformat()
+        if baby_weight_at_start is not None:  # Check is not None because 0.0 is valid
+            subscription_data["baby_weight_at_start"] = baby_weight_at_start
+        
+        response = supabase.table('user_subscriptions').insert(subscription_data).execute()
         
         logger.debug(f"insert_user_subscription(): Inserted data: {response.data}")
 

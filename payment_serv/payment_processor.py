@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 import stripe
@@ -7,7 +7,7 @@ from supabase import Client
 from gotrue import User
 from pydantic import BaseModel
 
-from ios.io_db import insert_checkout_session
+from ios.io_db import insert_checkout_session, UserAddress
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -20,6 +20,13 @@ class CheckoutSessionRequest(BaseModel):
 class CheckoutSessionResponse(BaseModel):
     checkout_url: str
     session_id: str
+
+class CreateSubscriptionRequest(BaseModel):
+    babyBirthdate: str  # Will receive as YYYY-MM-DD string
+    babyWeight: float  # Changed from Decimal since we're receiving a float
+    wantNappyWraps: bool
+    address: dict  # Changed from UserAddress since we're receiving a plain dict
+    cancelUrl: Optional[str] = '/'
 
 class SubscriptionDetailsRequest(BaseModel):
     session_id: str
@@ -35,6 +42,44 @@ class SubscriptionDetailsResponse(BaseModel):
     status: str
     start_date: datetime
     end_date: Optional[datetime] = None
+
+# Calculate the next Tuesday for billing_cycle_anchor
+def next_tuesday():
+    today = datetime.now()
+    days_until_tuesday = (1 - today.weekday()) % 7  # Tuesday is 1 in Python's weekday()
+    if days_until_tuesday == 0:  # If today is Tuesday, get next Tuesday
+        days_until_tuesday = 7
+    next_tues = today + timedelta(days=days_until_tuesday)
+    return int(next_tues.timestamp())
+
+def get_or_create_customer(email: str) -> stripe.Customer:
+    """
+    Check if a customer exists in Stripe by email, and either:
+    - Return the existing customer if found
+    - Create a new customer if not found
+
+    Args:
+        email: Customer's email address
+
+    Returns:
+        Stripe Customer object
+    """
+    # Search for customers with matching email
+    customers = stripe.Customer.list(email=email, limit=1)
+
+    # If customer exists, return the first match
+    if customers and len(customers.data) > 0:
+        existing_customer = customers.data[0]
+        print(f"Found existing customer: {existing_customer.id}")
+
+        return existing_customer
+
+    # No customer found, create a new one
+    new_customer = stripe.Customer.create(
+        email=email
+    )
+    print(f"Created new customer: {new_customer.id}")
+    return new_customer
 
 def create_stripe_checkout_session(
     supabase: Client,
@@ -102,6 +147,62 @@ def create_stripe_checkout_session(
             "session_id": session.id
         }
         
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error creating checkout session: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Error creating checkout session: {str(e)}")
+        raise
+
+def create_stripe_subscription_checkout_session(
+        supabase: Client, 
+        line_items: list[dict],
+        user: User,
+        address_id: str,
+        frontend_url: str,
+        cancel_url: str
+    ) -> dict:
+
+    try:
+        logger.info(f"create_stripe_checkout_session_with_line_items(): Creating subscription checkout session for user {user.id} with line items {line_items}")
+
+        stripe_customer = get_or_create_customer(email=user.email)
+
+        # Create Stripe checkout session
+        session = stripe.checkout.Session.create(
+            customer=stripe_customer.id,
+            line_items=line_items,
+            mode="subscription",
+            subscription_data={
+                'billing_cycle_anchor': next_tuesday(),
+            },
+            success_url=f"{frontend_url}/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{frontend_url}{cancel_url}",
+            metadata={
+                "user_id": user.id,
+                "address_id": address_id,
+            }
+        )
+
+        logger.info(f"create_stripe_checkout_session_with_line_items(): Checkout session created with ID {session.id}")
+
+        # Store session info in Supabase
+        insert_checkout_session(
+            supabase=supabase,
+            session_id=session.id,
+            user_id=user.id,
+            customer_id=session.customer,
+            line_items=line_items
+        )
+
+        logger.info(f"create_stripe_checkout_session_with_line_items(): Checkout session stored in Supabase for user {user.id} with session ID {session.id}\nSession URL: {session.url}")
+
+        # Return session URL and ID
+        return {
+            "checkout_url": session.url,
+            "session_id": session.id
+        }
+
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error creating checkout session: {str(e)}")
         raise

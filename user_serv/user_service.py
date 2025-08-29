@@ -129,7 +129,7 @@ def get_user_addresses(supabase: Client, user_id: str) -> List[io_db.UserAddress
         logger.error(f"get_user_addresses(): Error fetching addresses for user {user_id}: {str(e)}")
         raise
 
-def add_user_address(supabase: Client, address_request: AddUserAddressRequest, user_id: str) -> io_db.UserAddress:
+def add_user_address(supabase: Client, address_request: AddUserAddressRequest, user_id: str) -> AddUserAddressResponse:
     """
     Add a new address for a user to the database
 

@@ -85,26 +85,17 @@ async def handle_subscription_created(webhook_event: WebhookEvent, supabase: Cli
         logger.debug(f"SUBCRIPTION CREATED - User ID: {user_id}")
         logger.debug(f"SUBCRIPTION CREATED - Address ID: {address_id}")
 
-        # Get the plan id from the subscriptions table in supabase
-        plan_id_response = supabase.table('subscription_plans').select('id').eq('stripe_price_id', subscription['items']['data'][0]['price']['id']).execute()
-        if not plan_id_response.data:
-            raise Exception("Plan ID not found for the given price ID")
-        plan_id = plan_id_response.data[0]['id']
-
-        logger.debug(f"Plan ID: {plan_id}")
-
         # Create subscription record
         insert_user_subscription(
             supabase=supabase,
-            plan_id=plan_id,
-            subscription_id=subscription.id,
-            price_id=subscription['items']['data'][0]['price']['id'],
             customer_id=subscription.customer,
+            stripe_subscription_id=subscription.id,
             status=subscription.status,
-            address_id=address_id,
+            address_id=address_id if address_id else None,
             subscribed_at=datetime.fromtimestamp(subscription.created),
             last_payment_date=datetime.fromtimestamp(subscription['items']['data'][0]['current_period_start']),
             next_payment_date=datetime.fromtimestamp(subscription['items']['data'][0]['current_period_end']),
+            # Note: baby_dob and baby_weight_at_start will be populated when creating subscription through the API
         )
         
         logger.info(f"Created subscription for user {subscription.customer}")
