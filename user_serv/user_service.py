@@ -11,18 +11,20 @@ import ios.io_db as io_db
 
 logger = logging.getLogger('uvicorn.error')
 
+class ProductDetails(BaseModel):
+    name: str
+    price: float
+    currency: str
+
 class SubscriptionDetailsResponse(BaseModel):
     id: Optional[UUID]
-    #TODO: Add plan name logic
-    # plan_name: str
     status: str
-    #TODO: Add monthly cost logic
-    # monthly_cost: float
     start_date: datetime
     end_date: Optional[datetime] = None
     subscription_id: str
     next_payment_date: Optional[datetime] = None
     address_id: Optional[UUID] = None  # Optional field for address ID if applicable
+    items: List[ProductDetails] = []  # List of products in the subscription
 
 class UserAddressRequest(BaseModel):
     id: Optional[UUID] = None  # Optional UUID for existing address
@@ -80,20 +82,40 @@ def get_user_subscriptions(supabase: Client, user_id: str) -> List[SubscriptionD
         subscriptions = []
         for sub in response.data:
             try:
-                # Get price details from Stripe
-                # price = stripe.Price.retrieve(sub['price_id'])
-                # product = stripe.Product.retrieve(price.product)
+                
 
+                # Get product details from the subscription_items and products tables
+                product_response = supabase.table('subscription_items') \
+                    .select(
+                        "product(name, price, currency)"
+                    ) \
+                    .eq('subscription_id', sub['id']) \
+                    .execute()
+                
+                logger.debug(f"Product details for subscription {sub['id']}: {product_response.data}")
+
+                # Create list to hold product details
+                product_items = []
+                
+                if product_response.data:
+                    for item in product_response.data:
+                        if item['product']:  # Check if product data exists
+                            product = item['product']
+                            product_items.append(ProductDetails(
+                                name=product['name'],
+                                price=float(product['price']) / 100,
+                                currency=product['currency']
+                            ))
+                    
                 subscription_details = SubscriptionDetailsResponse(
                     id=sub['id'],
-                    # plan_name=product.name,
                     status=sub['status'],
-                    # monthly_cost=price.unit_amount / 100.0,  # Convert from cents to currency
                     start_date=sub['subscribed_at'],
                     next_payment_date=sub['next_payment_date'],
                     end_date=sub['cancelled_at'],
-                    subscription_id=sub['stripe_subscription_id'],   # Assuming this field is available
-                    address_id=sub['address_id'] if 'address_id' in sub else None
+                    subscription_id=sub['stripe_subscription_id'],
+                    address_id=sub['address_id'] if 'address_id' in sub else None,
+                    items=product_items
                 )
                 subscriptions.append(subscription_details)
                 
