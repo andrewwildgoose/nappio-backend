@@ -174,13 +174,13 @@ async def get_authenticated_user(request: Request):
         raise HTTPException(status_code=401, detail="No auth token")
     
     token = authorization.replace('Bearer ', '')
-    logger.debug(f"get_authenticated_user(): Received token: {token}")
+    #logger.debug(f"get_authenticated_user(): Received token: {token}")
 
     try:
         auth_response = supabase.auth.get_user(token)
         if not auth_response or not auth_response.user:
             raise HTTPException(status_code=401, detail="Invalid token")
-        logger.debug(f"get_authenticated_user(): Authenticated user: {auth_response.user}")
+        #logger.debug(f"get_authenticated_user(): Authenticated user: {auth_response.user}")
         return auth_response.user
 
     except Exception as e:
@@ -194,9 +194,9 @@ async def get_user_subscriptions(user = Depends(get_authenticated_user)):
     Get a list of subscriptions for the authenticated user
     """
     try:
-        logger.debug(f"get_user_subscriptions(): Authenticated user: {user}")
+        #logger.debug(f"get_user_subscriptions(): Authenticated user: {user}")
         subscriptions = user_service.get_user_subscriptions(supabase, user.id)
-        logger.debug(f"get_user_subscriptions(): Found subscriptions: {subscriptions}")
+        ##logger.debug(f"get_user_subscriptions(): Found subscriptions: {subscriptions}")
         return subscriptions
     except Exception as e:
         logger.error(f"Error getting user subscriptions: {str(e)}")
@@ -213,14 +213,14 @@ async def get_user_addresses(user = Depends(get_authenticated_user)):
         List[UserAddress]: List of addresses associated with the user (empty list if none found)
     """
     try:
-        logger.debug(f"get_user_addresses(): Authenticated user: {user}")
+        #logger.debug(f"get_user_addresses(): Authenticated user: {user}")
         addresses = user_service.get_user_addresses(supabase, user.id)
         
         if not addresses:
             logger.info(f"get_user_addresses(): No addresses found for user {user.id}")
             return []
             
-        logger.debug(f"get_user_addresses(): Found {len(addresses)} addresses")
+        #logger.debug(f"get_user_addresses(): Found {len(addresses)} addresses")
         return addresses
         
     except Exception as e:
@@ -351,7 +351,7 @@ async def create_checkout_session(
         logger.error(f"Error creating checkout session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     
-@payment_router.post("/create-subscription")
+@payment_router.post("/create-subscription", response_model=CheckoutSessionResponse)
 async def create_subscription(
     request: CreateSubscriptionRequest,
     user = Depends(get_authenticated_user)
@@ -375,13 +375,21 @@ async def create_subscription(
 
         addressResponse = user_service.add_user_address(supabase, address_obj, user.id)
 
+        # Combine standard metadata with any custom metadata from the request
+        metadata = {
+            "user_id": user.id,
+            "address_id": addressResponse.address.id,
+            "baby_dob": request.babyBirthdate,
+            "baby_weight": request.babyWeight,
+        }
+
         result = pa.create_stripe_subscription_checkout_session(
             supabase=supabase,
             line_items=subscription_items,
             user=user,
-            address_id=addressResponse.address.id,
             frontend_url=FRONTEND_URL,
-            cancel_url=request.cancelUrl
+            cancel_url=request.cancelUrl,
+            metadata=metadata
         )
 
         return result

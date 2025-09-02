@@ -27,6 +27,7 @@ class CreateSubscriptionRequest(BaseModel):
     wantNappyWraps: bool
     address: dict  # Changed from UserAddress since we're receiving a plain dict
     cancelUrl: Optional[str] = '/'
+    metadata: Optional[dict] = None  # Optional metadata to pass to the payment provider
 
 class SubscriptionDetailsRequest(BaseModel):
     session_id: str
@@ -47,8 +48,12 @@ class SubscriptionDetailsResponse(BaseModel):
 def next_tuesday():
     today = datetime.now()
     days_until_tuesday = (1 - today.weekday()) % 7  # Tuesday is 1 in Python's weekday()
-    if days_until_tuesday == 0:  # If today is Tuesday, get next Tuesday
-        days_until_tuesday = 7
+    
+    # If it's Tuesday (days_until = 0) or days until Tuesday is 1 or 2
+    # add a week to get the following Tuesday
+    if days_until_tuesday < 3:  # This covers 0 (Tuesday), 1 (Monday), 2 (Sunday)
+        days_until_tuesday += 7
+        
     next_tues = today + timedelta(days=days_until_tuesday)
     return int(next_tues.timestamp())
 
@@ -158,10 +163,10 @@ def create_stripe_subscription_checkout_session(
         supabase: Client, 
         line_items: list[dict],
         user: User,
-        address_id: str,
         frontend_url: str,
-        cancel_url: str
-    ) -> dict:
+        cancel_url: str,
+        metadata: Optional[dict] = None
+    ) -> CheckoutSessionResponse:
 
     try:
         logger.info(f"create_stripe_checkout_session_with_line_items(): Creating subscription checkout session for user {user.id} with line items {line_items}")
@@ -174,14 +179,12 @@ def create_stripe_subscription_checkout_session(
             line_items=line_items,
             mode="subscription",
             subscription_data={
-                'billing_cycle_anchor': next_tuesday(),
+                'trial_end': next_tuesday(),
+                'metadata': metadata or {}
             },
             success_url=f"{frontend_url}/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{frontend_url}{cancel_url}",
-            metadata={
-                "user_id": user.id,
-                "address_id": address_id,
-            }
+            metadata=metadata
         )
 
         logger.info(f"create_stripe_checkout_session_with_line_items(): Checkout session created with ID {session.id}")
@@ -192,16 +195,16 @@ def create_stripe_subscription_checkout_session(
             session_id=session.id,
             user_id=user.id,
             customer_id=session.customer,
-            line_items=line_items
+            line_items=line_items,
         )
 
         logger.info(f"create_stripe_checkout_session_with_line_items(): Checkout session stored in Supabase for user {user.id} with session ID {session.id}\nSession URL: {session.url}")
 
         # Return session URL and ID
-        return {
-            "checkout_url": session.url,
-            "session_id": session.id
-        }
+        return CheckoutSessionResponse(
+            checkout_url=session.url,
+            session_id=session.id
+        )
 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error creating checkout session: {str(e)}")

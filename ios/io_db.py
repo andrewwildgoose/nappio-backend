@@ -142,7 +142,7 @@ def update_checkout_session(
     supabase: Client,
     session_id: str,
     status: str,
-    address_id: Optional[str] = None
+    metadata: Optional[dict] = None
 ) -> dict:
     """Update an existing checkout session"""
     try:
@@ -151,7 +151,7 @@ def update_checkout_session(
         # Prepare data to update
         response = supabase.table('checkout_sessions').update({
             "status": status,
-            "address_id": address_id
+            "metadata": metadata
         }).eq("session_id", session_id).execute()
 
         logger.debug(f"update_checkout_session(): Updated data: {response.data}")
@@ -234,6 +234,37 @@ def insert_user_subscription(
         logger.error(f"insert_user_subscription(): Failed to store subscription: {str(e)}")
         raise
 
+def insert_subscription_items(
+        supabase: Client,
+        subscription_items: list[dict]):
+    """
+    Insert subscription items into the database
+
+    Args:
+        supabase: Supabase client instance
+        subscription_items: List of subscription item dictionaries to insert
+    Returns:
+        bool: True if insertion was successful, False otherwise
+    Raises:
+        Exception: If database insertion fails
+    """
+    try:
+        for item in subscription_items:
+            subscription_item = {
+                "subscription_id": item["subscription_id"],
+                "product_id": item["product_id"],
+                "quantity": item["quantity"]
+            }
+            logger.debug(f"insert_subscription_items(): Inserting subscription item: {subscription_item}")
+            response = supabase.table('subscription_items').insert(subscription_item).execute()
+            logger.debug(f"insert_subscription_items(): Inserted data: {response.data}")
+
+        return True
+
+    except Exception as e:
+        logger.error(f"insert_subscription_items(): Failed to store subscription items: {str(e)}")
+        raise
+
 def update_user_subscription(
     supabase: Client,
     subscription_id: str,
@@ -260,7 +291,7 @@ def update_user_subscription(
         # Update the subscription in the database
         response = supabase.table('user_subscriptions').update(
             data
-        ).eq("subscription_id", subscription_id).execute()
+        ).eq("stripe_subscription_id", subscription_id).execute()
 
         logger.debug(f"update_user_subscription(): Updated data: {response.data}")
         

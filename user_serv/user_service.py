@@ -13,9 +13,11 @@ logger = logging.getLogger('uvicorn.error')
 
 class SubscriptionDetailsResponse(BaseModel):
     id: Optional[UUID]
-    plan_name: str
+    #TODO: Add plan name logic
+    # plan_name: str
     status: str
-    monthly_cost: float
+    #TODO: Add monthly cost logic
+    # monthly_cost: float
     start_date: datetime
     end_date: Optional[datetime] = None
     subscription_id: str
@@ -74,23 +76,23 @@ def get_user_subscriptions(supabase: Client, user_id: str) -> List[SubscriptionD
         response = supabase.table('user_subscriptions').select('*').eq('user_id', user_id).execute()
         logger.debug(f"get_user_subscriptions(): Retrieved subscriptions for user {user_id}")
 
-        logger.debug(f"get_user_subscriptions(): Response data: {response.data}")
+        #logger.debug(f"get_user_subscriptions(): Response data: {response.data}")
         subscriptions = []
         for sub in response.data:
             try:
                 # Get price details from Stripe
-                price = stripe.Price.retrieve(sub['price_id'])
-                product = stripe.Product.retrieve(price.product)
+                # price = stripe.Price.retrieve(sub['price_id'])
+                # product = stripe.Product.retrieve(price.product)
 
                 subscription_details = SubscriptionDetailsResponse(
                     id=sub['id'],
-                    plan_name=product.name,
+                    # plan_name=product.name,
                     status=sub['status'],
-                    monthly_cost=price.unit_amount / 100.0,  # Convert from cents to currency
+                    # monthly_cost=price.unit_amount / 100.0,  # Convert from cents to currency
                     start_date=sub['subscribed_at'],
                     next_payment_date=sub['next_payment_date'],
                     end_date=sub['cancelled_at'],
-                    subscription_id=sub['subscription_id'],   # Assuming this field is available
+                    subscription_id=sub['stripe_subscription_id'],   # Assuming this field is available
                     address_id=sub['address_id'] if 'address_id' in sub else None
                 )
                 subscriptions.append(subscription_details)

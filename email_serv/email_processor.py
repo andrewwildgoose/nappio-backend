@@ -98,7 +98,7 @@ def send_confirmation_email(to_email: str, first_name: str, confirmation_link: s
         logger.exception(f"Failed to send email to {to_email}: {str(e)}")
         return {"status": 500, "error": str(e)}
     
-def send_new_subscription_email(to_email: str, first_name: str, subscription_details: dict):
+def send_new_subscription_email(to_email: str, first_name: str, subscription_items: list[dict]):
     """
     Send a subscription confirmation email to the specified recipient using MailerSend.
     """
@@ -136,16 +136,27 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_det
         html_content = f"""
         <p>Hi {first_name},</p>
         <p>Congratulations on starting your subscription!</p>
-        <p><table><tr><td>Plan:</td><td>{subscription_details['plan_name']}</td></tr>
-        <tr><td>Cost (monthly):</td><td>{subscription_details['price']}</td></tr>
+        <p><table>
+        <tr><th>Item</th><th>Cost</th></tr>
+        """
+        for item in subscription_items:
+            html_content += f"""
+            <tr><td>{item['item_name']}</td><td>{item['cost']}</td></tr>
+            """
+        html_content += f"""
         </table></p>
         <p>Best,<br>The {SERVICE_NAME} Team</p>
         """
         plaintext_content = f"""
         Hi {first_name},   
         Congratulations on starting your subscription!
-        Plan: {subscription_details['plan_name']}
-        Cost (monthly): {subscription_details['price']}
+        """
+        for item in subscription_items:
+            plaintext_content += f"""
+            Item: {item['item_name']}
+            Cost: {item['cost']}
+            """
+        plaintext_content += f"""
         Best,
         The {SERVICE_NAME} Team
         """
