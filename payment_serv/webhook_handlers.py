@@ -6,14 +6,14 @@ from supabase import Client
 from product_serv import stripe_product_sync as sps
 from ios.io_db import insert_user_subscription, update_user_subscription, update_checkout_session, insert_subscription_items
 from user_serv.user_service import assign_subscription_address
-from email_serv.email_processor import send_new_subscription_email
+from email_serv.email_processor import send_new_subscription_email, send_order_email_to_team
 
 logger = logging.getLogger('uvicorn.error')
 
 async def webhook_router(event: WebhookEvent, supabase: Client) -> None:
     """Route webhook events to appropriate handlers"""
     try:
-        logger.info("Webhook event received in webhook_router()")
+        logger.info(f"Webhook event received in webhook_router(): {event.data}")
         if event.type == 'product.created':
             await sps.handle_product_created(event, supabase)
         elif event.type == 'product.updated':
@@ -44,18 +44,18 @@ async def handle_checkout_completed(event: WebhookEvent, supabase: Client) -> No
         logger.info(f"Handling checkout.session.completed for session ID: {event.data['object']['id']}")
         logger.debug(f"Session metadata: {event.data['object']['metadata']}")
 
-        # Retrieve the session and subscription details
-        session = stripe.checkout.Session.retrieve(event.data['object'].id)
+        # # Retrieve the session and subscription details
+        # session = stripe.checkout.Session.retrieve(event.data['object'].id)
                 
         update_checkout_session(
             supabase=supabase,
-            session_id=session.id,
-            status=session.status,
-            metadata=session.metadata,
+            session_id=event.data['object']['id'],
+            status=event.data['object']['status'],
+            metadata=event.data['object']['metadata'],
         )
-            
-        logger.info(f"Updated checkout session status to {session.status} for session ID: {session.id}")
-        
+
+        logger.info(f"Updated checkout session status to {event.data['object']['status']} for session ID: {event.data['object']['id']}")
+
     except Exception as e:
         logger.error(f"Error handling checkout.session.completed: {str(e)}")
         raise
@@ -93,7 +93,6 @@ async def handle_subscription_created(webhook_event: WebhookEvent, supabase: Cli
             subscribed_at=datetime.fromtimestamp(subscription.created),
             last_payment_date=datetime.fromtimestamp(subscription['items']['data'][0]['current_period_start']),
             next_payment_date=datetime.fromtimestamp(subscription['items']['data'][0]['current_period_end']),
-            # Note: baby_dob and baby_weight_at_start will be populated when creating subscription through the API
             baby_dob=baby_dob,
             baby_weight_at_start=baby_weight,
         )
@@ -151,9 +150,18 @@ async def handle_subscription_created(webhook_event: WebhookEvent, supabase: Cli
         logger.info(f"User email: {user_email}")
         logger.info(f"User first name: {first_name}")
 
-
-
+        # Send confirmation to customer
         send_new_subscription_email(user_email, first_name, subscription_items)
+
+        # Send confirmation to team
+        team_email_subject = f"New Subscription: {user_email}"
+
+        send_order_email_to_team(
+            subject=team_email_subject,
+            customer_email=user_email,
+            customer_name=first_name,
+            items=subscription_items
+        )
         logger.info(f"Sent subscription confirmation email to {user_email}")
         
     except Exception as e:

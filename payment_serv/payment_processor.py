@@ -20,6 +20,7 @@ class CheckoutSessionRequest(BaseModel):
 class CheckoutSessionResponse(BaseModel):
     checkout_url: str
     session_id: str
+    metadata: Optional[dict] = None
 
 class CreateSubscriptionRequest(BaseModel):
     babyBirthdate: str  # Will receive as YYYY-MM-DD string
@@ -29,20 +30,12 @@ class CreateSubscriptionRequest(BaseModel):
     cancelUrl: Optional[str] = '/'
     metadata: Optional[dict] = None  # Optional metadata to pass to the payment provider
 
-class SubscriptionDetailsRequest(BaseModel):
+class PaymentDetailsRequest(BaseModel):
     session_id: str
 
-class SubscriptionSimpleResponse(BaseModel):
-    plan_name: str
+class PaymentDetailsResponse(BaseModel):
+    amount_total: int
     customer_email: str
-
-class SubscriptionDetailsResponse(BaseModel):
-    plan_name: str
-    customer_email: str
-    subscription_id: str
-    status: str
-    start_date: datetime
-    end_date: Optional[datetime] = None
 
 # Calculate the next Tuesday for billing_cycle_anchor
 def next_tuesday():
@@ -87,61 +80,56 @@ def get_or_create_customer(email: str) -> stripe.Customer:
     return new_customer
 
 def create_stripe_checkout_session(
-    supabase: Client,
-    request: CheckoutSessionRequest,
-    user: User,
-    frontend_url: str
-) -> dict:
+        supabase: Client, 
+        line_items: list[dict],
+        user: User,
+        frontend_url: str,
+        cancel_url: str,
+        metadata: Optional[dict] = None
+    ) -> CheckoutSessionResponse:
     """
-    Creates a Stripe checkout session for subscription.
+    Creates a Stripe one-off payment checkout session.
+
+    Args:
+        supabase: Supabase client instance
+        line_items: List of line items to include in the checkout session
+        user: Authenticated user object
+        frontend_url: URL of the frontend application
+        cancel_url: URL to redirect to if the user cancels the checkout
+        metadata: Optional metadata to include in the checkout session
+
+    Returns:
+        CheckoutSessionResponse containing the checkout URL, session ID and metadata
     """
     try:
+        logger.info(f"create_stripe_checkout_session(): Creating checkout session for user {user.id} with line items {line_items}")
 
-        # Log the incoming price ID and strip any whitespace
-        price_id = request.priceId.strip()
-        logger.debug(f"Attempting to create checkout with price_id: '{price_id}'")
-        
-        # List all prices first to verify our API connection
-        all_prices = stripe.Price.list(limit=5)
-        logger.debug(f"Available prices: {[p.id for p in all_prices.data]}")
+        stripe_customer = get_or_create_customer(email=user.email)
 
-        # Try to retrieve the specific price
-        try:
-            price = stripe.Price.retrieve(price_id)
-            logger.debug(f"Successfully retrieved price: {price.id}")
-        except stripe.error.StripeError as e:
-            logger.error(f"Failed to retrieve price '{price_id}': {str(e)}")
-            raise
 
-        logger.info(f"create_stripe_checkout_session(): Creating checkout session for user {user.id} with price ID {request.priceId}")
-        # Create checkout session
-
-        stripe_customer = stripe.Customer.create(
-            email=user.email,
-            metadata={"user_id": user.id}
-        )
-        
+        # Create Stripe checkout session
         session = stripe.checkout.Session.create(
             customer=stripe_customer.id,
-            line_items=[{"price": request.priceId, "quantity": 1}],
-            mode="subscription",
+            line_items=line_items,
+            mode="payment",
             success_url=f"{frontend_url}/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{frontend_url}{request.cancelUrl}",
-            metadata={
-                "user_id": user.id,
-                "address_id": request.addressId,
+            cancel_url=f"{frontend_url}{cancel_url}",
+            metadata=metadata,
+            saved_payment_method_options={
+                "payment_method_save": "enabled"
             }
         )
 
-        logger.info(f"create_stripe_checkout_session(): Checkout session created with ID {session.id}")
-        
-        # Store session info in Supabase
-        insert_checkout_session(
+        logger.info(f"create_stripe_checkout_session_with_line_items(): Checkout session created with ID {session.id}")
+
+        # Store session in supabase
+        inserted_session = insert_checkout_session(
             supabase=supabase,
             session_id=session.id,
             user_id=user.id,
             customer_id=session.customer,
-            price_id=request.priceId
+            line_items=line_items,
+            metadata=metadata
         )
 
         logger.info(f"create_stripe_checkout_session(): Checkout session stored in Supabase for user {user.id} with session ID {session.id}")
@@ -149,7 +137,8 @@ def create_stripe_checkout_session(
         # Return session URL and ID
         return {
             "checkout_url": session.url,
-            "session_id": session.id
+            "session_id": session.id,
+            "metadata": metadata
         }
         
     except stripe.error.StripeError as e:
@@ -213,43 +202,28 @@ def create_stripe_subscription_checkout_session(
         logger.error(f"Error creating checkout session: {str(e)}")
         raise
 
-def get_subscription_details(session_id: str) -> SubscriptionSimpleResponse:
+def get_payment_completed_details(session_id: str) -> PaymentDetailsResponse:
     """
-    Fetch subscription details from a completed checkout session
-    
+    Fetch payment details from a completed checkout session
+
     Args:
         session_id: Stripe checkout session ID
         
     Returns:
-        SubscriptionSimpleResponse with plan and customer details
+        PaymentDetailsResponse with items and customer details
     """
     try:
-        logger.info(f"get_subscription_details(): Fetching subscription details for session ID {session_id}")
-        
+        logger.info(f"get_payment_details(): Fetching payment details for session ID {session_id}")
+
         # Retrieve the session and subscription details
         session = stripe.checkout.Session.retrieve(session_id)
-        subscription = stripe.Subscription.retrieve(session.subscription)
+        amount_total = session['amount_total']
 
-        # Access items directly
-        subscription_items = subscription['items']
-
-        logger.debug(f'Subscription items: {subscription_items}')
-
-        if 'data' in subscription_items and subscription_items['data']:
-            first_item = subscription_items['data'][0]
-            if 'price' in first_item and 'id' in first_item['price']:
-                price = stripe.Price.retrieve(first_item['price']['id'])
-                product = stripe.Product.retrieve(price.product)
-            else:
-                logger.error("Price information not found in subscription item")
-        else:
-            logger.error("No subscription items found")
-
-        
+        # access      
         logger.info(f"get_subscription_details(): Subscription details fetched for session ID {session_id}")
         
-        return SubscriptionSimpleResponse(
-            plan_name=product.name,
+        return PaymentDetailsResponse(
+            amount_total=amount_total,
             customer_email=session.customer_details.email
         )
         

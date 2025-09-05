@@ -100,7 +100,8 @@ def insert_checkout_session(
         user_id: str,
         customer_id: str,
         line_items: list[dict],
-        status: str = "pending"
+        status: str = "pending",
+        metadata: Optional[dict] = None
 ) -> dict:
     """
     Insert a new checkout session into the database
@@ -109,9 +110,11 @@ def insert_checkout_session(
         supabase: Supabase client instance
         session_id: Stripe checkout session ID
         user_id: User ID from Supabase
-        price_id: Stripe price ID
+        customer_id: Stripe customer ID
+        line_items: List of line items for the checkout session
         status: Session status (default: "pending")
-        
+        metadata: Optional metadata for the checkout session
+
     Returns:
         dict: The inserted checkout session data
         
@@ -127,7 +130,8 @@ def insert_checkout_session(
             "user_id": user_id,
             "customer_id": customer_id,
             "line_items": line_items,
-            "status": status
+            "status": status,
+            "metadata": metadata
         }).execute()
         
         logger.debug(f"insert_checkout_session(): Inserted data: {response.data}")
@@ -164,59 +168,54 @@ def update_checkout_session(
 
 def insert_user_subscription(
     supabase: Client,
-    customer_id: str,
-    stripe_subscription_id: str,
     status: str,
+    user_id: str,
+    customer_id: Optional[str] = None,
+    stripe_subscription_id: Optional[str] = None,
     address_id: Optional[UUID] = None,
     baby_dob: Optional[datetime] = None,
     baby_weight_at_start: Optional[float] = None,
     subscribed_at: Optional[datetime] = None,
     last_payment_date: Optional[datetime] = None,
     next_payment_date: Optional[datetime] = None,
-) -> dict:
+) -> UUID:
     """
     Insert a new user subscription into the database
     
     Args:
         supabase: Supabase client instance
-        customer_id: Stripe customer ID
-        stripe_subscription_id: Stripe subscription ID
         status: Subscription status ('pending', 'active', or 'cancelled')
+        user_id: User ID from Supabase
+        customer_id: Stripe customer ID (optional)
+        stripe_subscription_id: Stripe subscription ID (optional)
         address_id: UUID of the delivery address (optional)
         baby_dob: Baby's date of birth (optional)
         baby_weight_at_start: Baby's weight when starting subscription (optional)
-        subscribed_at: Subscription start timestamp (optional, defaults to now)
+        subscribed_at: Subscription start timestamp (optional)
         last_payment_date: Last payment date (optional)
         next_payment_date: Next payment date (optional)
     Returns:
-        dict: The inserted subscription data
-        
+        dict: The inserted user subscription record
+
     Raises:
         Exception: If database insertion fails
     """
     try:
-        # Get the supabase user from the checkout session
-        user_id_response = supabase.table('checkout_sessions').select('user_id').eq('customer_id', customer_id).execute()
-        
-        if not user_id_response.data:
-            raise Exception("User ID not found in checkout session")
-        user_id = user_id_response.data[0]['user_id']
-
-        logger.debug(f"insert_user_subscription(): Retrieved user ID {user_id} from checkout session for customer {customer_id}")
-        
-        # Prepare data to insert
+        # Initialize subscription data with required fields
         subscription_data = {
-            "user_id": user_id,
-            "customer_id": customer_id,
-            "stripe_subscription_id": stripe_subscription_id,
             "status": status,
-            "subscribed_at": subscribed_at.isoformat() if subscribed_at else None,
-            "last_payment_date": last_payment_date.isoformat() if last_payment_date else None,
-            "next_payment_date": next_payment_date.isoformat() if next_payment_date else None,
-            "cancelled_at": None
+            "user_id": user_id
         }
-
-        # Add optional fields if they are provided
+        if customer_id:
+            subscription_data["customer_id"] = customer_id
+        if stripe_subscription_id:
+            subscription_data["stripe_subscription_id"] = stripe_subscription_id
+        if subscribed_at:
+            subscription_data["subscribed_at"] = subscribed_at.isoformat()
+        if last_payment_date:
+            subscription_data["last_payment_date"] = last_payment_date.isoformat()
+        if next_payment_date:
+            subscription_data["next_payment_date"] = next_payment_date.isoformat()
         if address_id:
             subscription_data["address_id"] = str(address_id)  # Convert UUID to string
         if baby_dob:
@@ -228,7 +227,10 @@ def insert_user_subscription(
         
         logger.debug(f"insert_user_subscription(): Inserted data: {response.data}")
 
-        return response.data[0] if response.data else None
+        if not response.data:
+            raise Exception("No data returned from subscription insert")
+            
+        return response.data[0]
         
     except Exception as e:
         logger.error(f"insert_user_subscription(): Failed to store subscription: {str(e)}")
@@ -244,7 +246,7 @@ def insert_subscription_items(
         supabase: Supabase client instance
         subscription_items: List of subscription item dictionaries to insert
     Returns:
-        bool: True if insertion was successful, False otherwise
+        response: the inserted subscription items records
     Raises:
         Exception: If database insertion fails
     """
@@ -259,7 +261,7 @@ def insert_subscription_items(
             response = supabase.table('subscription_items').insert(subscription_item).execute()
             logger.debug(f"insert_subscription_items(): Inserted data: {response.data}")
 
-        return True
+        return response
 
     except Exception as e:
         logger.error(f"insert_subscription_items(): Failed to store subscription items: {str(e)}")
@@ -268,30 +270,78 @@ def insert_subscription_items(
 def update_user_subscription(
     supabase: Client,
     subscription_id: str,
-    status: str,
+    status: Optional[str] = None,
+    user_id: Optional[str] = None,
+    customer_id: Optional[str] = None,
+    stripe_subscription_id: Optional[str] = None,
+    address_id: Optional[UUID] = None,
+    baby_dob: Optional[datetime] = None,
+    baby_weight_at_start: Optional[float] = None,
+    subscribed_at: Optional[datetime] = None,
     last_payment_date: Optional[datetime] = None,
     next_payment_date: Optional[datetime] = None,
     cancelled_at: Optional[datetime] = None
 ) -> dict:
-    """Update an existing user subscription"""
+    """Update an existing user subscription
+    
+    Args:
+        supabase: Supabase client instance
+        subscription_id: ID of the subscription to update
+        status: Subscription status ('pending', 'active', or 'cancelled') (optional)
+        user_id: User ID from Supabase (optional)
+        customer_id: Stripe customer ID (optional)
+        stripe_subscription_id: Stripe subscription ID (optional)
+        address_id: UUID of the delivery address (optional)
+        baby_dob: Baby's date of birth (optional)
+        baby_weight_at_start: Baby's weight when starting subscription (optional)
+        subscribed_at: Subscription start timestamp (optional)
+        last_payment_date: Last payment date (optional)
+        next_payment_date: Next payment date (optional)
+        cancelled_at: Cancellation timestamp (optional)
+    Returns:
+        dict: The updated subscription data
+        
+    Raises:
+        Exception: If database update fails
+    """
     try:
-        logger.debug(f"update_user_subscription(): Updating subscription for to status {status}")
+        logger.debug(f"update_user_subscription(): Updating subscription {subscription_id}")
 
-        # Prepare data to update
-        data = {"status": status}
+        # Initialize empty update data
+        data = {}
 
-        # Only include optional fields if they are provided
-        if cancelled_at:
-            data["cancelled_at"] = cancelled_at.isoformat()
-        if last_payment_date:
+        # Add all optional fields if they are provided
+        if status is not None:
+            data["status"] = status
+        if user_id is not None:
+            data["user_id"] = user_id
+        if customer_id is not None:
+            data["customer_id"] = customer_id
+        if stripe_subscription_id is not None:
+            data["stripe_subscription_id"] = stripe_subscription_id
+        if subscribed_at is not None:
+            data["subscribed_at"] = subscribed_at.isoformat()
+        if last_payment_date is not None:
             data["last_payment_date"] = last_payment_date.isoformat()
-        if next_payment_date:
+        if next_payment_date is not None:
             data["next_payment_date"] = next_payment_date.isoformat()
+        if cancelled_at is not None:
+            data["cancelled_at"] = cancelled_at.isoformat()
+        if address_id is not None:
+            data["address_id"] = str(address_id)  # Convert UUID to string
+        if baby_dob is not None:
+            data["baby_dob"] = baby_dob.isoformat()
+        if baby_weight_at_start is not None:  # 0.0 is valid
+            data["baby_weight_at_start"] = baby_weight_at_start
+
+        if not data:
+            logger.warning("update_user_subscription(): No fields provided to update")
+            return None
         
         # Update the subscription in the database
         response = supabase.table('user_subscriptions').update(
             data
-        ).eq("stripe_subscription_id", subscription_id).execute()
+        ).eq("id", subscription_id).execute()
 
         logger.debug(f"update_user_subscription(): Updated data: {response.data}")
         
@@ -301,7 +351,7 @@ def update_user_subscription(
         logger.error(f"update_user_subscription(): Failed to update subscription: {str(e)}")
         raise
 
-def get_user_subscriptions(supabase, user_id):
+def get_user_subscriptions(supabase: Client, user_id: str):
     """
     Retrieve all subscriptions for a given user ID
     """
@@ -319,6 +369,71 @@ def get_user_subscriptions(supabase, user_id):
     except Exception as e:
         logger.error(f"get_user_subscriptions(): Error retrieving subscriptions for user ID {user_id}: {str(e)}")
         raise Exception(f"Error retrieving subscriptions for user ID {user_id}: {str(e)}")
+
+def insert_subscription_progress(supabase: Client, subscription_id: str, status: str) -> dict:
+    """
+    Insert a new subscription progress record into the database
+
+    Args:
+        subscription_id (str): The ID of the subscription.
+        status (str): The current status of the subscription.
+
+    Returns:
+        dict: The inserted subscription progress record or None if the insertion failed.
+
+    Raises:
+        Exception: If the insertion fails.
+    """
+    try:
+        response = supabase.table('subscription_progress').insert({
+            "subscription_id": subscription_id,
+            "status": status
+        }).execute()
+
+        logger.debug(f"insert_subscription_progress(): Inserted data: {response}")
+
+        return response.data[0] if response.data else None
+
+    except Exception as e:
+        logger.error(f"insert_subscription_progress(): Failed to insert subscription progress: {str(e)}")
+        raise
+
+def update_subscription_progress(
+        supabase: Client, 
+        progress_id: str, 
+        status: Optional[str],
+        meeting_date: Optional[datetime]) -> dict:
+    """
+    Update the progress of a subscription.
+
+    Args:
+        supabase (Client): The Supabase client instance.
+        progress_id (str): The ID of the progress record to update.
+        status (Optional[str]): The new status of the subscription.
+        meeting_date (Optional[datetime]): The new meeting date for the subscription.
+
+    Returns:
+        dict: The updated subscription progress record or None if the update failed.
+
+    Raises:
+        Exception: If the update fails.
+    """
+    try:
+        update_data = {}
+        if status:
+            update_data["status"] = status
+        if meeting_date:
+            update_data["meeting_date"] = meeting_date
+
+        response = supabase.table('subscription_progress').update(update_data).eq('id', progress_id).execute()
+
+        logger.debug(f"update_subscription_progress(): Updated data: {response}")
+
+        return response.data[0] if response.data else None
+
+    except Exception as e:
+        logger.error(f"update_subscription_progress(): Failed to update subscription progress: {str(e)}")
+        raise
 
 def insert_user_address(
         supabase: Client,

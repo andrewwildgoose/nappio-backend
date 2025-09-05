@@ -3,6 +3,12 @@ import logging
 from dotenv import load_dotenv
 from mailersend import emails
 
+# Load environment variables from .env file
+load_dotenv()
+
+# Frontend URL
+FRONTEND_URL = os.environ.get('FRONTEND_URL')
+
 logger = logging.getLogger('uvicorn.error')
 logger.setLevel(logging.DEBUG)
 
@@ -134,31 +140,55 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
         
         # Set email content (HTML and plain text)
         html_content = f"""
-        <p>Hi {first_name},</p>
-        <p>Congratulations on starting your subscription!</p>
-        <p><table>
-        <tr><th>Item</th><th>Cost</th></tr>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <p>Hi {first_name},</p>
+            <p>Congratulations on starting your subscription!</p>
+            
+            <h3>Subscription Details:</h3>
+            <table style="border-collapse: collapse; width: 100%; margin-top: 10px; margin-bottom: 20px;">
+                <tr style="background-color: #f7b18a;">
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Price</th>
+                </tr>
         """
         for item in subscription_items:
             html_content += f"""
-            <tr><td>{item['item_name']}</td><td>{item['cost']}</td></tr>
-            """
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 8px;">{item['item_name']}</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['cost']}</td>
+                </tr>"""
+
         html_content += f"""
-        </table></p>
-        <p>Best,<br>The {SERVICE_NAME} Team</p>
+            </table>
+
+            <p>We'll be in touch to arrange your onboarding session with a member of our team.</p>
+            <p>Best regards,<br>The {SERVICE_NAME} Team</p>
+            <a href="{FRONTEND_URL}">Visit our website</a>
+        </div>
         """
+
+        # Plain text content
         plaintext_content = f"""
-        Hi {first_name},   
-        Congratulations on starting your subscription!
-        """
+            Hi {first_name},   
+            Congratulations on starting your subscription!
+
+            Subscription Details:
+            {'=' * 50}
+            {' ' * 2}Item{' ' * 26}Price
+            {'-' * 50}"""
+
         for item in subscription_items:
-            plaintext_content += f"""
-            Item: {item['item_name']}
-            Cost: {item['cost']}
-            """
+
+            plaintext_content += f"\n{item['item_name']:<30}{item['cost']:>12}"
+
         plaintext_content += f"""
-        Best,
-        The {SERVICE_NAME} Team
+            {'=' * 50}
+
+            We'll be in touch to arrange your onboarding session with a member of our team
+
+            Best regards,
+            The {SERVICE_NAME} Team
+            {FRONTEND_URL}
         """
         
         mailer.set_html_content(html_content, mail_body)
@@ -188,4 +218,86 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
     
     except Exception as e:
         logger.exception(f"Failed to send email to {to_email}: {str(e)}")
+        return {"status": 500, "error": str(e)}
+    
+
+def send_order_email_to_team(subject: str, customer_email: str, customer_name: str, items: list[dict]):
+    """
+    Send an email to the internal team using MailerSend.
+    """
+    try:
+        logger.info(f"Sending email to team with subject: {subject}")
+
+        #TODO: Move this to .env
+        team_email = "info@nappio.co.uk"
+        mailer = emails.NewEmail(EMAIL_API_TOKEN)
+        mail_body = {}
+        mail_from = {
+            "name": SERVICE_NAME,
+            "email": "info@nappio.co.uk",
+        }
+        mailer.set_mail_from(mail_from, mail_body)
+        recipients = [
+            {
+                "name": "Nappio Team",
+                "email": team_email
+            }
+        ]
+        mailer.set_mail_to(recipients, mail_body)
+        mailer.set_subject(subject, mail_body)
+
+        # HTML Content
+        html_content = f"""
+        <h2>New Order Received</h2>
+
+        <p><strong>Customer:</strong> {customer_name}<br>
+        <strong>Email:</strong> {customer_email}</p>
+
+        <h3>Items:</h3>
+        <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
+            <tr style="background-color: #f7b18a;">
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Quantity</th>
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Item Cost</th>
+
+            </tr>
+        """
+        total_cost = 0
+        for item in items:
+
+            html_content += f"""
+            <tr>
+                <td style="border: 1px solid #ddd; padding: 8px;">{item['item_name']}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['quantity']}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['cost']}</td>
+            </tr>"""
+
+        html_content += f"</table>"
+
+        # Plain text content
+        plaintext_content = f"""
+            New Order Received
+
+            Customer: {customer_name}
+            Email: {customer_email}
+
+            Items:
+            {'=' * 80}
+            {' ' * 2}Item{' ' * 26}Quantity{' ' * 5}Cost{' ' * 7}
+        """
+
+        for item in items:
+            plaintext_content += f"\n{item['item_name']:<30}{item['quantity']:>8}{item['cost']:>12}"
+
+        mailer.set_html_content(html_content, mail_body)
+        mailer.set_plaintext_content(plaintext_content, mail_body)
+
+        response = mailer.send(mail_body)
+        if response.strip() != '202':
+            logger.error(f"Failed to send email to {team_email}. response: {response}, response type: {type(response)}")
+            return {"response": response}
+        logger.info(f"Email sent successfully to {team_email}\nresponse: {response}")
+        return {"status": 200, "response": response}
+    except Exception as e:
+        logger.exception(f"Failed to send email to {team_email}: {str(e)}")
         return {"status": 500, "error": str(e)}

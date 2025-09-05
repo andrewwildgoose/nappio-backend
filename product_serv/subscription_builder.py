@@ -30,9 +30,36 @@ def determine_age(birthdate: datetime) -> int:
         logger.error(f"determine_age(): Error determining age for birthdate {birthdate}: {str(e)}")
         raise
 
-def build_subscription_items(supabase: Client, data: CreateSubscriptionRequest) -> list[dict]:
+#TODO: refactor this to include a list of items to include
+def build_stripe_startup_cost_items(supabase: Client) -> list[dict]:
     """
-    Build a CreateSubscriptionRequest from the incoming request data.
+    Build a list of the line items to be included in the startup costs from the incoming request data
+    """
+    try:
+        logger.info("build_stripe_startup_cost_items(): Building startup cost items")
+
+        # Startup costs product ID
+        #TODO: refactor this to use database
+        product_ids = ["10d144db-9ae0-47f0-b9e0-5d60267332a4"]
+
+        # Match the product IDs with Stripe price IDs from the db
+        stripe_price_ids = get_stripe_price_ids(supabase, product_ids)
+
+        logger.info(f"build_startup_cost_items(): Matched product IDs {product_ids} to Stripe price IDs {stripe_price_ids}")
+
+        # Build a stripe compatible set of line items
+        stripe_line_items = [{"price": price_id, "quantity": 1} for price_id in stripe_price_ids]
+        
+        logger.debug(f"build_stripe_startup_cost_items(): Built Stripe line items: {stripe_line_items}")
+
+        return stripe_line_items
+    except Exception as e:
+        logger.error(f"build_stripe_startup_cost_items(): Error building startup cost items: {str(e)}")
+        raise
+
+def build_subscription_items(supabase: Client, subscription_id: str, data: CreateSubscriptionRequest) -> list[dict]:
+    """
+    Build a list of the products within the subscription from the incoming request data.
     """
     try:
         logger.info(f"build_subscription_items(): Building subscription items for baby birthdate {data.babyBirthdate}, weight {data.babyWeight}, wantNappyWraps {data.wantNappyWraps}")
@@ -60,17 +87,57 @@ def build_subscription_items(supabase: Client, data: CreateSubscriptionRequest) 
                         rule["min_weight"] <= data.babyWeight <= rule["max_weight"]):
                     product_ids.append(rule["product_id"])
 
+        # Build a stripe compatible set of line items
+        subscription_items = [{"subscription_id": subscription_id, "product_id": product_id, "quantity": 1} for product_id in product_ids]
+
+        logger.debug(f"build_subscription_items(): Built subscription items: {subscription_items}")
+
+        return subscription_items
+    except Exception as e:
+        logger.error(f"build_subscription_items(): Error building subscription items: {str(e)}")
+        raise
+
+def build_stripe_subscription_items(supabase: Client, data: CreateSubscriptionRequest) -> list[dict]:
+    """
+    Build a list of the line items within the subscription from the incoming request data.
+    """
+    try:
+        logger.info(f"build_stripe_subscription_items(): Building subscription items for baby birthdate {data.babyBirthdate}, weight {data.babyWeight}, wantNappyWraps {data.wantNappyWraps}")
+        # Convert birthdate to datetime and get age
+        baby_birthdate = datetime.strptime(data.babyBirthdate, "%Y-%m-%d")
+        age_in_months = determine_age(baby_birthdate)
+
+        product_ids = []
+
+        # Add start up costs
+        product_ids.append("10d144db-9ae0-47f0-b9e0-5d60267332a4")
+
+        # Determine nappy subscription
+        for rule in NAPPY_RULES:
+            if (rule["min_age"] <= age_in_months <= rule["max_age"] and
+                    rule["min_weight"] <= data.babyWeight <= rule["max_weight"]):
+                product_ids.append(rule["product_id"])
+
+        want_nappy_wraps = data.wantNappyWraps
+
+        # Determine wrap subscription
+        if want_nappy_wraps:
+            for rule in WRAP_RULES:
+                if (rule["min_age"] <= age_in_months <= rule["max_age"] and
+                        rule["min_weight"] <= data.babyWeight <= rule["max_weight"]):
+                    product_ids.append(rule["product_id"])
+
         # Match the product IDs with Stripe price IDs from the db
         stripe_price_ids = get_stripe_price_ids(supabase, product_ids)
 
-        logger.info(f"build_subscription_items(): Matched product IDs {product_ids} to Stripe price IDs {stripe_price_ids}")
+        logger.info(f"build_stripe_subscription_items(): Matched product IDs {product_ids} to Stripe price IDs {stripe_price_ids}")
 
         # Build a stripe compatible set of line items
         stripe_line_items = [{"price": price_id, "quantity": 1} for price_id in stripe_price_ids]
-        
-        logger.debug(f"build_subscription_items(): Built Stripe line items: {stripe_line_items}")
+
+        logger.debug(f"build_stripe_subscription_items(): Built Stripe line items: {stripe_line_items}")
 
         return stripe_line_items
     except Exception as e:
-        logger.error(f"build_subscription_items(): Error building subscription items: {str(e)}")
+        logger.error(f"build_stripe_subscription_items(): Error building subscription items: {str(e)}")
         raise

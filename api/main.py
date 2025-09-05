@@ -18,7 +18,7 @@ import stripe
 import ios.io_db as io_db
 import product_serv.subscription_builder as sub_builder
 from email_serv.email_processor import send_confirmation_email
-from payment_serv.payment_processor import CheckoutSessionRequest, CheckoutSessionResponse, CreateSubscriptionRequest, SubscriptionDetailsRequest, SubscriptionSimpleResponse
+from payment_serv.payment_processor import CheckoutSessionRequest, CheckoutSessionResponse, CreateSubscriptionRequest, PaymentDetailsRequest, PaymentDetailsResponse
 import payment_serv.payment_processor as pa
 from payment_serv.webhook_handlers import WebhookEvent, webhook_router
 import user_serv.user_service as user_service
@@ -351,19 +351,31 @@ async def create_checkout_session(
         logger.error(f"Error creating checkout session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     
-@payment_router.post("/create-subscription", response_model=CheckoutSessionResponse)
-async def create_subscription(
+@payment_router.post("/start-subscription", response_model=CheckoutSessionResponse)
+async def start_subscription(
     request: CreateSubscriptionRequest,
     user = Depends(get_authenticated_user)
 ):
     """
-    Create a new subscription for the user
+    Start the process of setting up a new subscription for the user
     """
     try:
-        logger.debug(f"create_subscription(): Received request: {request.model_dump()}")
+        logger.debug(f"start_subscription(): Received request: {request.model_dump()}")
 
-        subscription_items = sub_builder.build_subscription_items(supabase, request)
+        # Add subscription to user_subscription table -> get subscription_id
+        subscription = io_db.insert_user_subscription(supabase, status="pending", user_id=user.id)
+        logger.debug(f"start_subscription(): Created subscription record: {subscription}")
 
+        # Add subscription to subscription_progress table
+        subscription_progress = io_db.insert_subscription_progress(supabase, subscription_id=subscription['id'], status=subscription['status'])
+        logger.debug(f"start_subscription(): Created subscription progress record: {subscription_progress}")
+
+        # Add products to subscription_items table
+        subscription_items = sub_builder.build_subscription_items(supabase, subscription['id'], request)
+        items_added = io_db.insert_subscription_items(supabase, subscription_items=subscription_items)
+        logger.debug(f"start_subscription(): Added {items_added} subscription items")
+
+        # Build and return checkout link for startup costs
         address_obj = user_service.AddUserAddressRequest(
             address_line_1=request.address["address_line_1"],
             address_line_2=request.address.get("address_line_2"),
@@ -378,40 +390,54 @@ async def create_subscription(
         # Combine standard metadata with any custom metadata from the request
         metadata = {
             "user_id": user.id,
-            "address_id": addressResponse.address.id,
+            "subscription_id": subscription['id'],
+            "address_id": str(addressResponse.address.id),
             "baby_dob": request.babyBirthdate,
             "baby_weight": request.babyWeight,
         }
 
-        result = pa.create_stripe_subscription_checkout_session(
+        # Build startup line items for stripe checkout
+        startup_line_items = sub_builder.build_stripe_startup_cost_items(supabase)
+        logger.debug(f"start_subscription(): Built startup line items: {startup_line_items}")
+
+        checkout_session = pa.create_stripe_checkout_session(
             supabase=supabase,
-            line_items=subscription_items,
+            line_items=startup_line_items,
             user=user,
             frontend_url=FRONTEND_URL,
             cancel_url=request.cancelUrl,
             metadata=metadata
         )
+        logger.debug(f"start_subscription(): Created checkout session: {checkout_session}")
 
-        return result
+        #TODO: move to 'create_subscription_checkout(subscription_id: str)' route
+        # result = pa.create_stripe_subscription_checkout_session(
+        #     supabase=supabase,
+        #     line_items=subscription_items,
+        #     user=user,
+        #     frontend_url=FRONTEND_URL,
+        #     cancel_url=request.cancelUrl,
+        #     metadata=metadata
+        # )
+
+        return checkout_session
     except Exception as e:
-        logger.error(f"Error creating subscription: {str(e)}")
+        logger.error(f"start_subscription(): Error starting subscription: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Get a user's subscription details
-@payment_router.post("/subscription-details", response_model=SubscriptionSimpleResponse)
-def get_subscription_details_route(
-    request: SubscriptionDetailsRequest,
+@payment_router.post("/payment-completed-details", response_model=PaymentDetailsResponse)
+def get_payment_completed_details_route(
+    request: PaymentDetailsRequest,
     user = Depends(get_authenticated_user)
 ):
     """
-    Fetch details for a successful subscription
+    Fetch details for a specific payment
     """
     try:
-        logger.debug(f"get_subscription_details(): Received request: {request.model_dump()}")
-        # Validate session ID
-        return pa.get_subscription_details(request.session_id)
+        logger.debug(f"get_payment_details(): Received request: {request.model_dump()}")
+        return pa.get_payment_completed_details(request.session_id)
     except Exception as e:
-        logger.error(f"Error getting subscription details: {str(e)}")
+        logger.error(f"Error getting payment details: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     
 # Stripe webhook endpoint for handling events
