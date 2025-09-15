@@ -1,3 +1,4 @@
+
 import logging
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
@@ -5,6 +6,9 @@ from datetime import datetime
 import pytz
 from uuid import UUID
 from supabase import Client
+import json
+
+from models.admin_models import SubscriptionDashboardResponse
 
 logger = logging.getLogger('uvicorn.error')
 logger.setLevel(logging.DEBUG)
@@ -160,7 +164,7 @@ def update_checkout_session(
 
         logger.debug(f"update_checkout_session(): Updated data: {response.data}")
         
-        return response.data[0] if response.data else None
+        return response.data if response.data else None
         
     except Exception as e:
         logger.error(f"update_checkout_session(): Failed to update checkout session: {str(e)}")
@@ -398,41 +402,35 @@ def insert_subscription_progress(supabase: Client, subscription_id: str, status:
         logger.error(f"insert_subscription_progress(): Failed to insert subscription progress: {str(e)}")
         raise
 
-def update_subscription_progress(
-        supabase: Client, 
-        progress_id: str, 
-        status: Optional[str],
-        meeting_date: Optional[datetime]) -> dict:
+def update_subscription_progress_admin(
+    supabase: Client,
+    subscription_id: str,
+    status: Optional[str] = None,
+    meeting_date: Optional[datetime] = None
+) -> None:
     """
-    Update the progress of a subscription.
-
-    Args:
-        supabase (Client): The Supabase client instance.
-        progress_id (str): The ID of the progress record to update.
-        status (Optional[str]): The new status of the subscription.
-        meeting_date (Optional[datetime]): The new meeting date for the subscription.
-
-    Returns:
-        dict: The updated subscription progress record or None if the update failed.
-
-    Raises:
-        Exception: If the update fails.
+    Update the progress record for a given subscription_id.
     """
     try:
         update_data = {}
-        if status:
+        if status is not None:
             update_data["status"] = status
-        if meeting_date:
-            update_data["meeting_date"] = meeting_date
-
-        response = supabase.table('subscription_progress').update(update_data).eq('id', progress_id).execute()
-
-        logger.debug(f"update_subscription_progress(): Updated data: {response}")
-
-        return response.data[0] if response.data else None
-
+        if meeting_date is not None:
+            # Convert datetime to ISO string if needed
+            if isinstance(meeting_date, datetime):
+                update_data["meeting_date"] = meeting_date.isoformat()
+            else:
+                update_data["meeting_date"] = meeting_date
+        if not update_data:
+            return  # Nothing to update
+        # Find the progress record by subscription_id
+        response = supabase.table('subscription_progress').update(update_data).eq('subscription_id', subscription_id).execute()
+        if hasattr(response, "error") and response.error:
+            logger.error(f"update_subscription_progress_admin(): Supabase error: {response.error}")
+            raise RuntimeError(f"Supabase error: {response.error}")
+        logger.info(f"update_subscription_progress_admin(): Updated progress for subscription_id {subscription_id}")
     except Exception as e:
-        logger.error(f"update_subscription_progress(): Failed to update subscription progress: {str(e)}")
+        logger.error(f"update_subscription_progress_admin(): Error updating progress: {str(e)}")
         raise
 
 def insert_user_address(
@@ -486,4 +484,132 @@ def delete_user_address(supabase: Client, address_id: UUID) -> bool:
         return response.data is not None and len(response.data) > 0
     except Exception as e:
         logger.error(f"delete_user_address(): Error deleting address with ID {address_id}: {str(e)}")
+        raise
+
+def get_subscription_progress(supabase: Client, auth_supabase: Client) -> list[SubscriptionDashboardResponse]:
+    """
+    Retrieve all subscription progress records joined with user subscription data and user information.
+    Returns a list of SubscriptionDashboardResponse.
+    """
+    try:
+        # 1. Get subscription_progress joined with user_subscriptions
+        progress_response = supabase.table('subscription_progress').select(
+            """
+            subscription_id,
+            status,
+            meeting_date,
+            last_updated,
+            user_subscriptions!inner (
+                id,
+                user_id,
+                status,
+                subscribed_at,
+                cancelled_at,
+                last_payment_date,
+                next_payment_date,
+                baby_dob,
+                baby_weight_at_start
+            )
+            """
+        ).execute()
+
+        if hasattr(progress_response, "error") and progress_response.error:
+            logger.error("Supabase error fetching subscription_progress: %s", progress_response.error)
+            raise RuntimeError(f"Supabase error: {progress_response.error}")
+
+        logger.debug(f"get_subscription_progress(): Retrieved subscription progress data: {progress_response.data}")
+
+        # 2. Collect all unique user_ids
+        user_ids = set()
+        for record in progress_response.data:
+            subscription = record.get("user_subscriptions")
+            if subscription and subscription.get("user_id"):
+                user_ids.add(subscription["user_id"])
+
+        if not user_ids:
+            logger.debug("No user IDs found in subscriptions")
+            return []
+
+        # 3. Get user info for all user_ids
+        users_response = auth_supabase.auth.admin.list_users()
+        users = users_response.users if hasattr(users_response, "users") else users_response
+        logger.debug(f"get_subscription_progress(): Retrieved user data: {users}")
+
+        # 4. Build a user_id -> user object map
+        user_map = {}
+        for user in users:
+            # Supabase Python client returns User objects, not dicts
+            user_id = getattr(user, "id", None)
+            if user_id:
+                user_map[user_id] = user
+
+        # 5. Build the final response
+        result = []
+        for record in progress_response.data:
+            subscription = record.get("user_subscriptions", {})
+            user_id = subscription.get("user_id")
+            user = user_map.get(user_id)
+
+            # Default values
+            customer_name = "Unknown"
+            customer_email = None
+
+            if user:
+                # Supabase User object: user_metadata is a dict
+                meta = getattr(user, "user_metadata", {}) or {}
+                first = meta.get("first_name", "") or meta.get("firstName", "")
+                last = meta.get("surname", "") or meta.get("lastName", "")
+                customer_name = f"{first} {last}".strip() or "Unknown"
+                customer_email = getattr(user, "email", None) or meta.get("email")
+
+            result.append(SubscriptionDashboardResponse(
+                subscription_id=record.get("subscription_id"),
+                user_id=user_id,
+                customer_name=customer_name,
+                customer_email=customer_email,
+                subscription_status=subscription.get("status"),
+                progress_status=record.get("status"),
+                meeting_date=record.get("meeting_date"),
+                subscribed_at=subscription.get("subscribed_at"),
+                cancelled_at=subscription.get("cancelled_at"),
+                last_payment_date=subscription.get("last_payment_date"),
+                next_payment_date=subscription.get("next_payment_date"),
+                baby_dob=subscription.get("baby_dob"),
+                baby_weight_at_start=subscription.get("baby_weight_at_start"),
+                last_updated=record.get("last_updated"),
+            ))
+
+        logger.debug("get_subscription_progress(): Returning %d dashboard records", len(result))
+        return result
+
+    except Exception as e:
+        logger.error(f"get_subscription_progress(): Error fetching subscription progress records: {str(e)}")
+        raise
+
+def get_user_by_subscription_id(supabase: Client, subscription_id: str) -> Optional[dict]:
+    """
+    Retrieve user information based on a subscription ID
+    """
+    try:
+        response = supabase.table('user_subscriptions').select('user_id').eq('id', subscription_id).execute()
+        logger.debug(f"get_user_by_subscription_id(): Retrieved user for subscription {subscription_id}: {response.data}")
+
+        if response.data and len(response.data) > 0:
+            user_id = response.data[0].get('user_id')
+            user_response = supabase.auth.admin.get_user_by_id(user_id)
+            if hasattr(user_response, "user"):
+                user = user_response.user
+                return {
+                    "id": getattr(user, "id", None),
+                    "email": getattr(user, "email", None),
+                    "user_metadata": getattr(user, "user_metadata", {})
+                }
+            else:
+                logger.warning(f"get_user_by_subscription_id(): No user found with ID {user_id}")
+                return None
+        else:
+            logger.warning(f"get_user_by_subscription_id(): No subscription found with ID {subscription_id}")
+            return None
+    except Exception as e:
+        logger.error(f"get_user_by_subscription_id(): Error fetching user for subscription {subscription_id}: {str(e)}")
         raise

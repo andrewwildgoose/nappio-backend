@@ -168,7 +168,7 @@ def create_stripe_subscription_checkout_session(
             line_items=line_items,
             mode="subscription",
             subscription_data={
-                'trial_end': next_tuesday(),
+                'billing_anchor': next_tuesday(),
                 'metadata': metadata or {}
             },
             success_url=f"{frontend_url}/success?session_id={{CHECKOUT_SESSION_ID}}",

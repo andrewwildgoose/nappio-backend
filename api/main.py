@@ -11,7 +11,6 @@ import uvicorn
 
 # Integration imports
 #import stripe
-from supabase import create_client, Client
 import stripe
 
 # Custom imports
@@ -22,6 +21,9 @@ from payment_serv.payment_processor import CheckoutSessionRequest, CheckoutSessi
 import payment_serv.payment_processor as pa
 from payment_serv.webhook_handlers import WebhookEvent, webhook_router
 import user_serv.user_service as user_service
+
+# Get Supabase client from config
+from config.supabase import get_supabase
 
 # Set up logging
 logger = logging.getLogger('uvicorn.error')
@@ -55,6 +57,9 @@ user_router = APIRouter(
     tags=["users"]
 )
 
+# Import admin routes
+from api.admin_routes import router as admin_router
+
 # Frontend URL
 FRONTEND_URL = os.environ.get('FRONTEND_URL')
 
@@ -76,11 +81,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Supabase configuration
-SUPABASE_URL: str = os.environ.get('SUPABASE_URL')
-SUPABASE_KEY: str = os.environ.get('SUPABASE_KEY')
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Initialize Supabase client
+supabase = get_supabase()
 
 # Stripe configuration
 stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
@@ -351,6 +353,7 @@ async def create_checkout_session(
         logger.error(f"Error creating checkout session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     
+# MARKED FOR DEPRECATION
 @payment_router.post("/start-subscription", response_model=CheckoutSessionResponse)
 async def start_subscription(
     request: CreateSubscriptionRequest,
@@ -362,8 +365,23 @@ async def start_subscription(
     try:
         logger.debug(f"start_subscription(): Received request: {request.model_dump()}")
 
+
+
+        # Build insert the address for the subscription
+        address_obj = user_service.AddUserAddressRequest(
+            address_line_1=request.address["address_line_1"],
+            address_line_2=request.address.get("address_line_2"),
+            city=request.address["city"],
+            postcode=request.address["postcode"],
+            country=request.address["country"],
+            address_notes=request.address.get("address_notes")
+        )
+        addressResponse = user_service.add_user_address(supabase, address_obj, user.id)
+
+        address_id = str(addressResponse.address.id)
+
         # Add subscription to user_subscription table -> get subscription_id
-        subscription = io_db.insert_user_subscription(supabase, status="pending", user_id=user.id)
+        subscription = io_db.insert_user_subscription(supabase, status="pending", user_id=user.id, address_id=address_id, baby_dob=datetime.fromisoformat(request.babyBirthdate), baby_weight_at_start=request.babyWeight)
         logger.debug(f"start_subscription(): Created subscription record: {subscription}")
 
         # Add subscription to subscription_progress table
@@ -375,23 +393,12 @@ async def start_subscription(
         items_added = io_db.insert_subscription_items(supabase, subscription_items=subscription_items)
         logger.debug(f"start_subscription(): Added {items_added} subscription items")
 
-        # Build and return checkout link for startup costs
-        address_obj = user_service.AddUserAddressRequest(
-            address_line_1=request.address["address_line_1"],
-            address_line_2=request.address.get("address_line_2"),
-            city=request.address["city"],
-            postcode=request.address["postcode"],
-            country=request.address["country"],
-            address_notes=request.address.get("address_notes")
-        )
-
-        addressResponse = user_service.add_user_address(supabase, address_obj, user.id)
 
         # Combine standard metadata with any custom metadata from the request
         metadata = {
             "user_id": user.id,
             "subscription_id": subscription['id'],
-            "address_id": str(addressResponse.address.id),
+            "address_id": address_id,
             "baby_dob": request.babyBirthdate,
             "baby_weight": request.babyWeight,
         }
@@ -476,6 +483,7 @@ async def stripe_webhook(request: Request):
     except Exception as e:
         logger.error(f"Webhook error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+    
 
 #TEST METHODS
 
@@ -524,6 +532,7 @@ app.include_router(test_router)
 app.include_router(router)
 app.include_router(payment_router)
 app.include_router(user_router)
+app.include_router(admin_router)
 
 # Run the app
 if __name__ == "__main__":

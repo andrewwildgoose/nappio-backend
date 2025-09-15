@@ -1,4 +1,5 @@
 import logging
+import os
 import stripe
 from datetime import datetime
 from typing import Optional, List
@@ -8,6 +9,7 @@ from supabase import Client
 from uuid import UUID
 
 import ios.io_db as io_db
+import email_serv.email_processor as email_processor
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -246,3 +248,32 @@ def assign_subscription_address(
         logger.error(f"Error assigning address to subscription: {str(e)}")
         raise
 
+def meeting_confirmation_process(supabase: Client, subscription_id: str, meeting_date: datetime):
+    """
+    Placeholder for meeting confirmation email process
+    """
+    try:
+        logger.info(f"meeting_confirmation_process(): Processing meeting confirmation for subscription {subscription_id} with meeting date {meeting_date}")
+        # build link to front end to trigger checkout session creation
+        # Frontend URL
+        FRONTEND_URL = os.environ.get('FRONTEND_URL')
+
+        checkout_trigger_link = f"{FRONTEND_URL}/checkout?subscription_id={subscription_id}"
+
+        # get user email & name from user id if needed
+        user_info = io_db.get_user_by_subscription_id(supabase, subscription_id)
+        if user_info:
+            user_email = user_info.get("email")
+            user_name = user_info.get("user_metadata", {}).get("name")
+
+            logger.info(f"meeting_confirmation_process(): Retrieved user info for subscription {subscription_id}: email={user_email}, name={user_name}")
+            if user_email and user_name:
+                email_processor.send_meeting_confirm_and_sub_checkout_email(user_email, user_name, meeting_date, checkout_trigger_link)
+        else:
+            raise ValueError(f"meeting_confirmation_process(): No user found for subscription {subscription_id}")
+
+        # email user confirming meeting date & with link to trigger checkout building
+        pass
+    except Exception as e:
+        logger.error(f"meeting_confirmation_process(): Error in meeting confirmation process: {str(e)}")
+        raise
