@@ -135,7 +135,7 @@ def subscribe_to_newsletter(subscriber: io_db.NewsletterSubscriber):
             logger.error("subscribe_to_newsletter(): Email already subscribed")
             raise HTTPException(status_code=400, detail="Email already subscribed")
         logger.exception(f"subscribe_to_newsletter(): Error subscribing to newsletter: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail='An unexpected error occurred.')
 
 @router.post("/newsletter/verify", response_model=io_db.EmailVerificationResponse)
 def verify_subscriber_email(request: io_db.EmailVerificationRequest):

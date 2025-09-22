@@ -7,6 +7,7 @@ import logging
 # Set up logging
 logger = logging.getLogger('uvicorn.error')
 
+# Is service role function any different from the standard client?
 class SupabaseConfig:
     _instance = None
     _client = None
@@ -50,13 +51,12 @@ class SupabaseConfig:
         Get the Supabase service role client instance.
         """
         try:
-            service_role_key = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
-            if not service_role_key:
-                raise ValueError("SUPABASE_SERVICE_ROLE_KEY must be set in environment variables")
+            if not cls._supabase_key:
+                raise ValueError("SUPABASE_KEY must be set in environment variables")
 
             admin_supabase = create_client(
                 cls._supabase_url, 
-                service_role_key,
+                cls._supabase_key,
                 options=ClientOptions(
                     auto_refresh_token=False,
                     persist_session=False,
