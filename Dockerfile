@@ -14,11 +14,18 @@ RUN mkdir -p api ios email_serv
 
 # Copy files maintaining project structure
 COPY api/main.py api/
+COPY api/admin_routes.py api/
 COPY ios/io_db.py ios/
 COPY email_serv/email_processor.py email_serv/
 COPY payment_serv/webhook_handlers.py payment_serv/
 COPY payment_serv/payment_processor.py payment_serv/
 COPY user_serv/user_service.py user_serv/
+COPY models/admin_models.py models/
+COPY models/payment_models.py models/
+COPY config/supabase.py config/
+COPY product_serv/stripe_product_sync.py product_serv/
+COPY product_serv/subscription_builder.py product_serv/
+
 
 # Set environment variables
 ENV PYTHONPATH=/app
