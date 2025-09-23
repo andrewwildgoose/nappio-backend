@@ -16,7 +16,7 @@ logger.setLevel(logging.DEBUG)
 load_dotenv()
 
 # Environment variables
-EMAIL_API_TOKEN = os.environ.get("EMAIL_API_TOKEN_TEST")
+EMAIL_API_TOKEN = os.environ.get("EMAIL_API_TOKEN")
 SERVICE_NAME = os.environ.get("SERVICE_NAME", "Nappio")
 
 if not EMAIL_API_TOKEN:
