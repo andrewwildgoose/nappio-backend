@@ -52,7 +52,7 @@ def get_stripe_price_ids(supabase: Client, product_ids: list[str]) -> list[str]:
         logger.error(f"get_stripe_price_ids(): Error retrieving price IDs: {str(e)}")
         raise Exception(f"Error retrieving price IDs: {str(e)}")
 
-def insert_newsletter_subscriber(supabase, subscriber: NewsletterSubscriber) -> dict:
+def insert_newsletter_subscriber(supabase: Client, subscriber: NewsletterSubscriber) -> dict:
     """
     Insert a new newsletter subscriber into the database
     """
