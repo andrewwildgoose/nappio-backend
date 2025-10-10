@@ -42,7 +42,14 @@ async def admin_update_subscription_progress(update: SubscriptionProgressUpdate)
     Update subscription progress (status and/or meeting_date) for a subscription
     """
     try:
+        if not update.status and not update.meeting_date:
+            raise HTTPException(status_code=400, detail="Both status and meeting_date must be provided")
+        
+        #TODO: build more robust status validation
+        if update.status not in ['meeting_scheduled']:
+            raise HTTPException(status_code=400, detail="Invalid status value")
         logger.info(f"admin_update_subscription_progress(): Updating subscription {update.subscription_id} with status {update.status} and meeting_date {update.meeting_date}")
+        
         # Call a function in io_db to perform the update
         io_db.update_subscription_progress_admin(
             update.subscription_id,
