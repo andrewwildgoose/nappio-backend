@@ -25,6 +25,7 @@ COPY models/payment_models.py models/
 COPY config/supabase.py config/
 COPY product_serv/stripe_product_sync.py product_serv/
 COPY product_serv/subscription_builder.py product_serv/
+COPY admin_serv/admin_service.py admin_serv/
 
 
 # Set environment variables
