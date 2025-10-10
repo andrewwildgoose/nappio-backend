@@ -3,9 +3,6 @@ import logging
 from dotenv import load_dotenv
 from mailersend import emails
 
-# Load environment variables from .env file
-load_dotenv()
-
 # Frontend URL
 FRONTEND_URL = os.environ.get('FRONTEND_URL')
 
@@ -18,6 +15,8 @@ load_dotenv()
 # Environment variables
 EMAIL_API_TOKEN = os.environ.get("EMAIL_API_TOKEN")
 SERVICE_NAME = os.environ.get("SERVICE_NAME", "Nappio")
+TEAM_EMAIL = os.environ.get("TEAM_EMAIL", "info@nappio.co.uk")
+ADMIN_DASHBOARD_URL = os.environ.get("ADMIN_DASHBOARD_URL")
 
 if not EMAIL_API_TOKEN:
     raise ValueError("SENDER_API_TOKEN is not set in the environment variables.")
@@ -267,87 +266,133 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
         logger.exception(f"Failed to send email to {to_email}: {str(e)}")
         return {"status": 500, "error": str(e)}
     
-def send_order_email_to_team(subject: str, customer_email: str, customer_name: str, items: list[dict]):
+def send_subscription_payment_active_email(to_email: str, first_name: str, subscription_items: list[dict]):
     """
-    Send an email to the internal team using MailerSend.
+    Send a subscription active email to the specified recipient using MailerSend.
     """
+    logger.info(f"Sending subscription active email to {to_email}")
+    
     try:
-        logger.info(f"Sending email to team with subject: {subject}")
-
-        #TODO: Move this to .env
-        team_email = "info@nappio.co.uk"
+        # Initialize MailerSend email client
         mailer = emails.NewEmail(EMAIL_API_TOKEN)
+        
+        # Define the email body
         mail_body = {}
+        
+        # Set sender details
         mail_from = {
             "name": SERVICE_NAME,
+            #TODO: hardcoded email, should be done better
             "email": "info@nappio.co.uk",
         }
+
         mailer.set_mail_from(mail_from, mail_body)
+
+                # Set recipient details
         recipients = [
             {
-                "name": "Nappio Team",
-                "email": team_email
+                "name": first_name,
+                "email": to_email
             }
         ]
         mailer.set_mail_to(recipients, mail_body)
-        mailer.set_subject(subject, mail_body)
-
-        # HTML Content
+        
+        # Set email subject
+        mailer.set_subject(f"Subscription activated: {SERVICE_NAME}", mail_body)
+        
+        # Set email content (HTML)
         html_content = f"""
-        <h2>New Order Received</h2>
-
-        <p><strong>Customer:</strong> {customer_name}<br>
-        <strong>Email:</strong> {customer_email}</p>
-
-        <h3>Items:</h3>
-        <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
-            <tr style="background-color: #f7b18a;">
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Quantity</th>
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Item Cost</th>
-
-            </tr>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <p>Hi {first_name},</p>
+            <p>Congratulations on activating your subscription with Nappio!</p>
         """
-        total_cost = 0
-        for item in items:
 
+
+        # Add subscription items table if there are any
+        if subscription_items:
             html_content += f"""
-            <tr>
-                <td style="border: 1px solid #ddd; padding: 8px;">{item['item_name']}</td>
-                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['quantity']}</td>
-                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['cost']}</td>
-            </tr>"""
+            <h3>Thanks for setting up your subscription payment with us. We're looking forward to meeting you at your onboarding session.</h3>
+            <table style="border-collapse: collapse; width: 100%; margin-top: 10px; margin-bottom: 20px;">
+                <tr style="background-color: #f7b18a;">
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Price (Monthly)</th>
+                </tr>
+            """
+            for item in subscription_items:
+                html_content += f"""
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 8px;">{item['item_name']}</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['cost']}</td>
+                </tr>"""
+            html_content += "</table>"
 
-        html_content += f"</table>"
+
+
+        html_content += f"""
+            <p>Let us know if you have any questions or need assistance.</p>
+            <p>Best regards,<br>The {SERVICE_NAME} Team</p>
+            <a href="{FRONTEND_URL}">Visit our website</a>
+        </div>
+        """
 
         # Plain text content
         plaintext_content = f"""
-            New Order Received
+            Hi {first_name},   
+            Congratulations on activating your subscription with Nappio!
 
-            Customer: {customer_name}
-            Email: {customer_email}
-
-            Items:
-            {'=' * 80}
-            {' ' * 2}Item{' ' * 26}Quantity{' ' * 5}Cost{' ' * 7}
+            Thanks for setting up your subscription payment with us. We're looking forward to meeting you at your onboarding session.
         """
 
-        for item in items:
-            plaintext_content += f"\n{item['item_name']:<30}{item['quantity']:>8}{item['cost']:>12}"
+        if subscription_items:
+            plaintext_content += f"""
+            Monthly Subscription Items:
+            {'=' * 50}
+            {' ' * 2}Item{' ' * 26}Price
+            {'-' * 50}"""
 
+            for item in subscription_items:
+                plaintext_content += f"\n{item['item_name']:<30}{item['cost']:>12}"
+
+            plaintext_content += f"\n{'=' * 50}"
+
+        plaintext_content += f"""
+
+            Let us know if you have any questions or need assistance.
+
+            Best regards,
+            The {SERVICE_NAME} Team
+            {FRONTEND_URL}
+        """
+        
         mailer.set_html_content(html_content, mail_body)
         mailer.set_plaintext_content(plaintext_content, mail_body)
-
+        
+        # Optionally, set reply-to address
+        reply_to = [
+            {
+                "name": "Nappio Info",
+                "email": "info@nappio.co.uk"
+            }
+        ]
+        mailer.set_reply_to(reply_to, mail_body)
+        
+        # Send the email
         response = mailer.send(mail_body)
+        
+        # Check the response status
+        #TODO: hardcoded response, should be done better
         if response.strip() != '202':
-            logger.error(f"Failed to send email to {team_email}. response: {response}, response type: {type(response)}")
+            logger.error(f"Failed to send email to {to_email}. response: {response}, response type: {type(response)}")
             return {"response": response}
-        logger.info(f"Email sent successfully to {team_email}\nresponse: {response}")
+        
+        # Log and return the success response
+        logger.info(f"Email sent successfully to {to_email}\nresponse: {response}")
         return {"status": 200, "response": response}
-    except Exception as e:
-        logger.exception(f"Failed to send email to {team_email}: {str(e)}")
-        return {"status": 500, "error": str(e)}
     
+    except Exception as e:
+        logger.exception(f"Failed to send email to {to_email}: {str(e)}")
+        return {"status": 500, "error": str(e)}
+
 def send_meeting_confirm_and_sub_checkout_email(to_email: str, first_name: str, meeting_date: str, checkout_builder_link: str):
     """
     Send a meeting confirmation and subscription checkout email to the specified recipient using MailerSend.
@@ -364,7 +409,7 @@ def send_meeting_confirm_and_sub_checkout_email(to_email: str, first_name: str, 
         # Set sender details
         mail_from = {
             "name": SERVICE_NAME,
-            "email": "info@nappio.co.uk",
+            "email": TEAM_EMAIL,
         }
         mailer.set_mail_from(mail_from, mail_body)
 
@@ -412,7 +457,87 @@ def send_meeting_confirm_and_sub_checkout_email(to_email: str, first_name: str, 
         return {"status": 200, "response": response}
     except Exception as e:
         logger.exception(f"Failed to send email to {to_email}: {str(e)}")
+        return {"status": 500, "error": str(e)}
 
+def send_order_email_to_team(subject: str, customer_email: str, customer_name: str, items: list[dict]):
+    """
+    Send an email to the internal team using MailerSend.
+    """
+    try:
+        logger.info(f"Sending email to team with subject: {subject}")
+
+        mailer = emails.NewEmail(EMAIL_API_TOKEN)
+        mail_body = {}
+        mail_from = {
+            "name": SERVICE_NAME,
+            "email": TEAM_EMAIL
+        }
+        mailer.set_mail_from(mail_from, mail_body)
+        recipients = [
+            {
+                "name": "Nappio Team",
+                "email": TEAM_EMAIL
+            }
+        ]
+        mailer.set_mail_to(recipients, mail_body)
+        mailer.set_subject(subject, mail_body)
+
+        # HTML Content
+        html_content = f"""
+        <h2>New Order Received</h2>
+
+        <p><strong>Customer:</strong> {customer_name}<br>
+        <strong>Email:</strong> {customer_email}</p>
+
+        <h3>Items:</h3>
+        <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
+            <tr style="background-color: #f7b18a;">
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Quantity</th>
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Item Cost</th>
+
+            </tr>
+        """
+
+        for item in items:
+
+            html_content += f"""
+            <tr>
+                <td style="border: 1px solid #ddd; padding: 8px;">{item['item_name']}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['quantity']}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['cost']}</td>
+            </tr>"""
+
+        html_content += f"</table>"
+
+        # Plain text content
+        plaintext_content = f"""
+            New Order Received
+
+            Customer: {customer_name}
+            Email: {customer_email}
+
+            Items:
+            {'=' * 80}
+            {' ' * 2}Item{' ' * 26}Quantity{' ' * 5}Cost{' ' * 7}
+        """
+
+        for item in items:
+            plaintext_content += f"\n{item['item_name']:<30}{item['quantity']:>8}{item['cost']:>12}"
+
+        mailer.set_html_content(html_content, mail_body)
+        mailer.set_plaintext_content(plaintext_content, mail_body)
+
+        response = mailer.send(mail_body)
+        if response.strip() != '202':
+            logger.error(f"Failed to send email to {TEAM_EMAIL}. response: {response}, response type: {type(response)}")
+            return {"response": response}
+        logger.info(f"Email sent successfully to {TEAM_EMAIL}\nresponse: {response}")
+        return {"status": 200, "response": response}
+    except Exception as e:
+        logger.exception(f"Failed to send email to {TEAM_EMAIL}: {str(e)}")
+        return {"status": 500, "error": str(e)}
+    
 def send_meeting_confirm_to_team(meeting_date: str, customer_name: str, customer_email: str, address):
     """
     Send a meeting confirmation email to the internal team using MailerSend.
@@ -420,12 +545,11 @@ def send_meeting_confirm_to_team(meeting_date: str, customer_name: str, customer
     try:
         logger.info(f"Sending meeting confirmation email to team for customer {customer_name} ({customer_email})")
 
-        team_email = "info@nappio.co.uk"
         mailer = emails.NewEmail(EMAIL_API_TOKEN)
 
         mail_body = {}
-        mailer.set_mail_from(team_email, mail_body)
-        mailer.set_mail_to([{"name": "Nappio Team", "email": team_email}], mail_body)
+        mailer.set_mail_from(TEAM_EMAIL, mail_body)
+        mailer.set_mail_to([{"name": "Nappio Team", "email": TEAM_EMAIL}], mail_body)
         mailer.set_subject("Meeting Confirmation", mail_body)
 
         html_content = f"""
@@ -446,9 +570,95 @@ def send_meeting_confirm_to_team(meeting_date: str, customer_name: str, customer
 
         response = mailer.send(mail_body)
         if response.strip() != '202':
-            logger.error(f"Failed to send email to {team_email}. response: {response}, response type: {type(response)}")
+            logger.error(f"Failed to send email to {TEAM_EMAIL}. response: {response}, response type: {type(response)}")
             return {"response": response}
-        logger.info(f"Email sent successfully to {team_email}\nresponse: {response}")
+        logger.info(f"Email sent successfully to {TEAM_EMAIL}\nresponse: {response}")
         return {"status": 200, "response": response}
     except Exception as e:
-        logger.exception(f"Failed to send email to {team_email}: {str(e)}")
+        logger.exception(f"Failed to send email to {TEAM_EMAIL}: {str(e)}")
+        return {"status": 500, "error": str(e)}
+    
+def send_subscription_payment_active_to_team(customer_email: str, customer_name: str, items: list[dict]):
+    """
+    Send a subscription payment active email to the internal team using MailerSend.
+    """
+    try:
+        logger.info(f"Sending email to team for active subscription of customer: {customer_name} ({customer_email})")
+
+        #TODO: Move this to .env
+        mailer = emails.NewEmail(EMAIL_API_TOKEN)
+        mail_body = {}
+        mail_from = {
+            "name": SERVICE_NAME,
+            "email": TEAM_EMAIL
+        }
+        mailer.set_mail_from(mail_from, mail_body)
+        recipients = [
+            {
+                "name": "Nappio Team",
+                "email": TEAM_EMAIL
+            }
+        ]
+
+        subject = f"Subscription Payment Active for: {customer_email}"
+        mailer.set_mail_to(recipients, mail_body)
+        mailer.set_subject(subject, mail_body)
+        
+        # HTML Content
+        html_content = f"""
+        <h2>New Subscription Active</h2>
+
+        <p><strong>Customer:</strong> {customer_name}<br>
+        <strong>Email:</strong> {customer_email}</p>
+
+        <p>This customer has activated their subscription with the following items:</p>
+
+        <h3>Items:</h3>
+        <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
+            <tr style="background-color: #f7b18a;">
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Quantity</th>
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Item Cost</th>
+
+            </tr>
+        """
+
+        for item in items:
+
+            html_content += f"""
+            <tr>
+                <td style="border: 1px solid #ddd; padding: 8px;">{item['item_name']}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['quantity']}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['cost']}</td>
+            </tr>"""
+
+        html_content += f"</table>"
+
+        html_content += f"<p><a href=\"{ADMIN_DASHBOARD_URL}\">Go to Admin Dashboard</a></p>"
+
+        # Plain text content
+        plaintext_content = f"""
+            New Order Received
+
+            Customer: {customer_name}
+            Email: {customer_email}
+
+            Items:
+            {'=' * 80}
+            {' ' * 2}Item{' ' * 26}Quantity{' ' * 5}Cost{' ' * 7}
+        """
+
+        for item in items:
+            plaintext_content += f"\n{item['item_name']:<30}{item['quantity']:>8}{item['cost']:>12}"
+
+        mailer.set_html_content(html_content, mail_body)
+        mailer.set_plaintext_content(plaintext_content, mail_body)
+
+        response = mailer.send(mail_body)
+        if response.strip() != '202':
+            logger.error(f"Failed to send email to {TEAM_EMAIL}. response: {response}, response type: {type(response)}")
+            return {"response": response}
+        logger.info(f"Email sent successfully to {TEAM_EMAIL}\nresponse: {response}")
+    except Exception as e:
+        logger.exception(f"Failed to send email to {TEAM_EMAIL}: {str(e)}")
+        return {"status": 500, "error": str(e)}

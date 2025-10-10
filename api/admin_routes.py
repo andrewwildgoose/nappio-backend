@@ -8,7 +8,6 @@ from supabase import Client
 
 from ios import io_db
 from models.admin_models import SubscriptionDashboardResponse, SubscriptionProgressUpdate
-from email_serv.email_processor import send_order_email_to_team
 from user_serv.user_service import meeting_confirmation_process
 
 # Set up logging
@@ -46,7 +45,6 @@ async def admin_update_subscription_progress(update: SubscriptionProgressUpdate)
         logger.info(f"admin_update_subscription_progress(): Updating subscription {update.subscription_id} with status {update.status} and meeting_date {update.meeting_date}")
         # Call a function in io_db to perform the update
         io_db.update_subscription_progress_admin(
-            supabase,
             update.subscription_id,
             status=update.status,
             meeting_date=update.meeting_date
@@ -70,7 +68,7 @@ async def admin_subscription_progress() -> List[SubscriptionDashboardResponse]:
     Get subscription progress for all users
     """
     try:
-        subscription_dashboard_data = io_db.get_subscription_progress(supabase, auth_supabase)
+        subscription_dashboard_data = io_db.get_all_subscription_progress(supabase, auth_supabase)
         return subscription_dashboard_data
     except Exception as e:
         logger.error(f"admin_subscription_progress(): Error getting subscription progress: {str(e)}")

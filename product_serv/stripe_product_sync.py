@@ -3,10 +3,15 @@ import logging
 from models.payment_models import WebhookEvent
 from supabase import Client
 
+# Get Supabase client from config
+from config.supabase import get_supabase
 
 logger = logging.getLogger('uvicorn.error')
 
-async def handle_product_created(event: WebhookEvent, supabase: Client):
+# Initialize Supabase client
+supabase = get_supabase()
+
+async def handle_product_created(event: WebhookEvent):
     """Sync new Stripe product to database"""
     try:
         # Extract product type from metadata
@@ -29,7 +34,7 @@ async def handle_product_created(event: WebhookEvent, supabase: Client):
     except Exception as e:
         logger.error(f"Error creating product: {e}")
 
-async def handle_product_updated(event: WebhookEvent, supabase: Client):
+async def handle_product_updated(event: WebhookEvent):
     """Sync updated Stripe product to database"""
     try:
         # Extract product data
@@ -51,7 +56,7 @@ async def handle_product_updated(event: WebhookEvent, supabase: Client):
     except Exception as e:
         logger.error(f"Error updating product: {e}")
 
-async def handle_product_deleted(event: WebhookEvent, supabase: Client):
+async def handle_product_deleted(event: WebhookEvent):
     """Handle product deletion in database"""
     try:
         stripe_product = event.data['object']
@@ -66,7 +71,7 @@ async def handle_product_deleted(event: WebhookEvent, supabase: Client):
     except Exception as e:
         logger.error(f"Error handling product deletion: {e}")
 
-async def handle_price_created(event: WebhookEvent, supabase: Client):
+async def handle_price_created(event: WebhookEvent):
     """Update product with price information"""
     try:
         stripe_price = event.data['object']
@@ -92,7 +97,7 @@ async def handle_price_created(event: WebhookEvent, supabase: Client):
     except Exception as e:
         logger.error(f"Error updating product price: {e}")
 
-async def handle_price_updated(event: WebhookEvent, supabase: Client):
+async def handle_price_updated(event: WebhookEvent):
     """Handle price updates in database"""
     try:
         stripe_price = event.data['object']

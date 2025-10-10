@@ -8,10 +8,17 @@ from uuid import UUID
 from supabase import Client
 import json
 
+# Get Supabase client from config
+from config.supabase import get_supabase
+
 from models.admin_models import SubscriptionDashboardResponse
 
 logger = logging.getLogger('uvicorn.error')
 logger.setLevel(logging.DEBUG)
+
+# Initialize Supabase client
+supabase = get_supabase()
+
 
 class NewsletterSubscriber(BaseModel):
     id: Optional[UUID] = None
@@ -39,7 +46,7 @@ class UserAddress(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-def get_stripe_price_ids(supabase: Client, product_ids: list[str]) -> list[str]:
+def get_stripe_price_ids(product_ids: list[str]) -> list[str]:
     """
     Retrieve Stripe price IDs from the database that match the given product IDs.
     """
@@ -52,7 +59,7 @@ def get_stripe_price_ids(supabase: Client, product_ids: list[str]) -> list[str]:
         logger.error(f"get_stripe_price_ids(): Error retrieving price IDs: {str(e)}")
         raise Exception(f"Error retrieving price IDs: {str(e)}")
 
-def insert_newsletter_subscriber(supabase: Client, subscriber: NewsletterSubscriber) -> dict:
+def insert_newsletter_subscriber(subscriber: NewsletterSubscriber) -> dict:
     """
     Insert a new newsletter subscriber into the database
     """
@@ -78,7 +85,7 @@ def insert_newsletter_subscriber(supabase: Client, subscriber: NewsletterSubscri
         logger.error(f"insert_newsletter_subscriber(): Error inserting newsletter subscriber: {str(e)}")   
         raise Exception(f"Error inserting newsletter subscriber: {str(e)}")
     
-def verify_newsletter_subscriber(supabase, verify_request: EmailVerificationRequest) -> bool:
+def verify_newsletter_subscriber(verify_request: EmailVerificationRequest) -> bool:
     """
     Verify a subscriber's email address
     """
@@ -99,7 +106,6 @@ def verify_newsletter_subscriber(supabase, verify_request: EmailVerificationRequ
         raise Exception(f"Error verifying email {email}: {str(e)}")
     
 def insert_checkout_session(
-        supabase: Client, 
         session_id: str, 
         user_id: str,
         customer_id: str,
@@ -171,7 +177,6 @@ def update_checkout_session(
         raise
 
 def insert_user_subscription(
-    supabase: Client,
     status: str,
     user_id: str,
     customer_id: Optional[str] = None,
@@ -182,7 +187,7 @@ def insert_user_subscription(
     subscribed_at: Optional[datetime] = None,
     last_payment_date: Optional[datetime] = None,
     next_payment_date: Optional[datetime] = None,
-) -> UUID:
+) -> dict:
     """
     Insert a new user subscription into the database
     
@@ -240,14 +245,11 @@ def insert_user_subscription(
         logger.error(f"insert_user_subscription(): Failed to store subscription: {str(e)}")
         raise
 
-def insert_subscription_items(
-        supabase: Client,
-        subscription_items: list[dict]):
+def insert_subscription_items(subscription_items: list[dict]):
     """
     Insert subscription items into the database
 
     Args:
-        supabase: Supabase client instance
         subscription_items: List of subscription item dictionaries to insert
     Returns:
         response: the inserted subscription items records
@@ -271,8 +273,29 @@ def insert_subscription_items(
         logger.error(f"insert_subscription_items(): Failed to store subscription items: {str(e)}")
         raise
 
+def get_subscription_items(subscription_id: str) -> list[dict]:
+    """
+    Retrieve subscription items for a given subscription ID
+
+    Args:
+        subscription_id: The ID of the subscription
+
+    Returns:
+        list[dict]: A list of subscription item dictionaries
+    """
+    try:
+        response = supabase.table('subscription_items')\
+            .select("*")\
+            .eq("subscription_id", subscription_id)\
+            .execute()
+        
+        logger.debug(f"get_subscription_items(): Retrieved data: {response.data}")
+        return response.data
+    except Exception as e:
+        logger.error(f"get_subscription_items(): Failed to retrieve subscription items: {str(e)}")
+        raise
+
 def update_user_subscription(
-    supabase: Client,
     subscription_id: str,
     status: Optional[str] = None,
     user_id: Optional[str] = None,
@@ -355,6 +378,22 @@ def update_user_subscription(
         logger.error(f"update_user_subscription(): Failed to update subscription: {str(e)}")
         raise
 
+# TODO: Implement get_subscription to return a SubscriptionDetailsResponse for a given subscription ID
+def get_subscription_by_id(subscription_id: str) -> dict | None:
+    """
+    Retrieve a subscription by its ID
+    """
+    try:
+        logger.debug(f"get_subscription_by_id(): Retrieving subscription with ID {subscription_id}")
+        
+        response = supabase.table('user_subscriptions').select('*').eq('id', subscription_id).execute()
+        if response.data:
+            return response.data[0]
+        return None
+    except Exception as e:
+        logger.error(f"get_subscription_by_id(): Error retrieving subscription with ID {subscription_id}: {str(e)}")
+        raise Exception(f"Error retrieving subscription with ID {subscription_id}: {str(e)}")
+
 def get_user_subscriptions(supabase: Client, user_id: str):
     """
     Retrieve all subscriptions for a given user ID
@@ -374,7 +413,7 @@ def get_user_subscriptions(supabase: Client, user_id: str):
         logger.error(f"get_user_subscriptions(): Error retrieving subscriptions for user ID {user_id}: {str(e)}")
         raise Exception(f"Error retrieving subscriptions for user ID {user_id}: {str(e)}")
 
-def insert_subscription_progress(supabase: Client, subscription_id: str, status: str) -> dict:
+def insert_subscription_progress(subscription_id: str, status: str) -> dict:
     """
     Insert a new subscription progress record into the database
 
@@ -403,10 +442,9 @@ def insert_subscription_progress(supabase: Client, subscription_id: str, status:
         raise
 
 def update_subscription_progress_admin(
-    supabase: Client,
     subscription_id: str,
     status: Optional[str] = None,
-    meeting_date: Optional[datetime] = None
+    meeting_date: Optional[datetime] = None,
 ) -> None:
     """
     Update the progress record for a given subscription_id.
@@ -434,7 +472,6 @@ def update_subscription_progress_admin(
         raise
 
 def insert_user_address(
-        supabase: Client,
         new_address: UserAddress
 ) -> Optional[UserAddress]:
 
@@ -486,7 +523,25 @@ def delete_user_address(supabase: Client, address_id: UUID) -> bool:
         logger.error(f"delete_user_address(): Error deleting address with ID {address_id}: {str(e)}")
         raise
 
-def get_subscription_progress(supabase: Client, auth_supabase: Client) -> list[SubscriptionDashboardResponse]:
+def get_subscription_progress(subscription_id: str) -> dict | None:
+    """
+    Retrieve the subscription progress record for a given subscription ID
+
+    Args:
+        subscription_id (str): The ID of the subscription.
+    Returns:
+        dict | None: The subscription progress record or None if not found.
+    """
+    try:
+        response = supabase.table('subscription_progress').select('*').eq('subscription_id', subscription_id).execute()
+        logger.debug(f"get_subscription_progress(): Retrieved progress for subscription {subscription_id}: {response.data}")
+
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error(f"get_subscription_progress(): Error fetching progress for subscription {subscription_id}: {str(e)}")
+        raise
+
+def get_all_subscription_progress(supabase: Client, auth_supabase: Client) -> list[SubscriptionDashboardResponse]:
     """
     Retrieve all subscription progress records joined with user subscription data and user information.
     Returns a list of SubscriptionDashboardResponse.
