@@ -177,7 +177,7 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
             <table style="border-collapse: collapse; width: 100%; margin-top: 10px; margin-bottom: 20px;">
                 <tr style="background-color: #f7b18a;">
                     <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
-                    <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Price (Monthly)</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Price (Weekly)</th>
                 </tr>
             """
             for item in subscription_items_recurring:
@@ -205,7 +205,7 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
 
         if subscription_items_recurring:
             plaintext_content += f"""
-            Monthly Subscription Items:
+            Weekly Subscription Items:
             {'=' * 50}
             {' ' * 2}Item{' ' * 26}Price
             {'-' * 50}"""
@@ -315,7 +315,7 @@ def send_subscription_payment_active_email(to_email: str, first_name: str, subsc
             <table style="border-collapse: collapse; width: 100%; margin-top: 10px; margin-bottom: 20px;">
                 <tr style="background-color: #f7b18a;">
                     <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
-                    <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Price (Monthly)</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Price (Weekly)</th>
                 </tr>
             """
             for item in subscription_items:
@@ -345,7 +345,7 @@ def send_subscription_payment_active_email(to_email: str, first_name: str, subsc
 
         if subscription_items:
             plaintext_content += f"""
-            Monthly Subscription Items:
+            Weekly Subscription Items:
             {'=' * 50}
             {' ' * 2}Item{' ' * 26}Price
             {'-' * 50}"""

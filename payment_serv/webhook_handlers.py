@@ -121,7 +121,6 @@ async def handle_subscription_updated(event: WebhookEvent) -> None:
         subscription_item = subscription['items']['data'][0]
 
         io_db.update_user_subscription(
-            supabase=supabase,
             subscription_id=subscription.id,
             status=subscription.status,
             last_payment_date=datetime.fromtimestamp(subscription_item.current_period_start),
