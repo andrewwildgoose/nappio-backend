@@ -370,6 +370,13 @@ def update_user_subscription(
             data
         ).eq("id", subscription_id).execute()
 
+        # if the status has changed, update the subscription progress as well
+        if "status" in data:
+            update_subscription_progress_admin(
+                subscription_id,
+                status=data["status"]
+            )
+
         logger.debug(f"update_user_subscription(): Updated data: {response.data}")
         
         return response.data[0] if response.data else None

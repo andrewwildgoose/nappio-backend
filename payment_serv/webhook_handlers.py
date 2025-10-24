@@ -117,11 +117,12 @@ async def handle_subscription_updated(event: WebhookEvent) -> None:
     """Handle subscription updates"""
     try:
         logger.info(f"Handling customer.subscription.updated for subscription ID: {event.data['object']['id']}")
+        logger.debug(f"Subscription data: {event.data['object']}")
         subscription = event.data['object']
         subscription_item = subscription['items']['data'][0]
 
         io_db.update_user_subscription(
-            subscription_id=subscription.id,
+            subscription_id=subscription.metadata['subscription_id'],
             status=subscription.status,
             last_payment_date=datetime.fromtimestamp(subscription_item.current_period_start),
             next_payment_date=datetime.fromtimestamp(subscription_item.current_period_end),

@@ -11,13 +11,13 @@ logger = logging.getLogger('uvicorn.error')
 
 #TODO: Refactor this to use the database
 NAPPY_RULES = [
-    {"min_age": 0, "max_age": 3, "min_weight": 0, "max_weight": 6, "product_id": "45bf677e-02e4-4b4f-8e8b-84eb47d46b89"},
-    {"min_age": 4, "max_age": 6, "min_weight": 6, "max_weight": 12, "product_id": "dfd5cc56-859d-4c40-9f25-2ae5dac2aca1"},
+    {"min_weight": 0, "max_weight": 6, "product_id": "45bf677e-02e4-4b4f-8e8b-84eb47d46b89"},
+    {"min_weight": 6, "max_weight": 36, "product_id": "dfd5cc56-859d-4c40-9f25-2ae5dac2aca1"},
 ]
 
 WRAP_RULES = [
-    {"min_age": 0, "max_age": 3, "min_weight": 0, "max_weight": 6, "product_id": "e5c2656e-f6db-4a2e-a642-cbceceb56054"},
-    {"min_age": 4, "max_age": 6, "min_weight": 6, "max_weight": 12, "product_id": "8e6bb3ed-eb3c-4812-8f65-9c2c93379fc4"},
+    {"min_weight": 0, "max_weight": 6, "product_id": "e5c2656e-f6db-4a2e-a642-cbceceb56054"},
+    {"min_weight": 6, "max_weight": 36, "product_id": "8e6bb3ed-eb3c-4812-8f65-9c2c93379fc4"},
 ]
 
 def determine_age(birthdate: datetime) -> int:
@@ -71,8 +71,7 @@ def build_subscription_items(subscription_id: str, data: CreateSubscriptionReque
 
         # Determine nappy subscription
         for rule in NAPPY_RULES:
-            if (rule["min_age"] <= age_in_months <= rule["max_age"] and
-                    rule["min_weight"] <= data.babyWeight <= rule["max_weight"]):
+            if rule["min_weight"] <= data.babyWeight <= rule["max_weight"]:
                 product_ids.append(rule["product_id"])
 
         want_nappy_wraps = data.wantNappyWraps
@@ -80,8 +79,7 @@ def build_subscription_items(subscription_id: str, data: CreateSubscriptionReque
         # Determine wrap subscription
         if want_nappy_wraps:
             for rule in WRAP_RULES:
-                if (rule["min_age"] <= age_in_months <= rule["max_age"] and
-                        rule["min_weight"] <= data.babyWeight <= rule["max_weight"]):
+                if rule["min_weight"] <= data.babyWeight <= rule["max_weight"]:
                     product_ids.append(rule["product_id"])
 
         # Build a stripe compatible set of line items
