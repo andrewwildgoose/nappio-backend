@@ -157,7 +157,7 @@ def update_checkout_session(
     session_id: str,
     status: str,
     metadata: Optional[dict] = None
-) -> dict:
+) -> list | None:
     """Update an existing checkout session"""
     try:
         logger.debug(f"update_checkout_session(): Updating session with ID {session_id} to status {status}")
@@ -308,7 +308,7 @@ def update_user_subscription(
     last_payment_date: Optional[datetime] = None,
     next_payment_date: Optional[datetime] = None,
     cancelled_at: Optional[datetime] = None
-) -> dict:
+) -> dict | None:
     """Update an existing user subscription
     
     Args:
