@@ -64,6 +64,7 @@ from api.admin_routes import router as admin_router
 
 # Frontend URL
 FRONTEND_URL = os.environ.get('FRONTEND_URL')
+ADMIN_DASHBOARD_URL = os.environ.get('ADMIN_DASHBOARD_URL')
 
 # Configure CORS
 origins = [
@@ -71,8 +72,8 @@ origins = [
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:5173",    
-    # inject frontend URL from environment variable
     FRONTEND_URL,
+    ADMIN_DASHBOARD_URL,
 ]
 
 app.add_middleware(
