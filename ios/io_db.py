@@ -675,3 +675,26 @@ def get_user_by_subscription_id(supabase: Client, subscription_id: str) -> Optio
     except Exception as e:
         logger.error(f"get_user_by_subscription_id(): Error fetching user for subscription {subscription_id}: {str(e)}")
         raise
+
+def get_subscription_address(subscription_id: str) -> Optional[dict]:
+    """
+    Retrieve the address associated with a subscription ID
+    """
+    try:
+        response = supabase.table('user_subscriptions').select('address_id').eq('id', subscription_id).execute()
+        logger.debug(f"get_subscription_address(): Retrieved address for subscription {subscription_id}: {response.data}")
+
+        if response.data and len(response.data) > 0:
+            address_id = response.data[0].get('address_id')
+            address_response = supabase.table('user_addresses').select('*').eq('id', address_id).execute()
+            if address_response.data and len(address_response.data) > 0:
+                return address_response.data[0]
+            else:
+                logger.warning(f"get_subscription_address(): No address found with ID {address_id}")
+                return None
+        else:
+            logger.warning(f"get_subscription_address(): No subscription found with ID {subscription_id}")
+            return None
+    except Exception as e:
+        logger.error(f"get_subscription_address(): Error fetching address for subscription {subscription_id}: {str(e)}")
+        raise

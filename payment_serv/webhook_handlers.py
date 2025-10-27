@@ -2,10 +2,8 @@ import logging
 import stripe
 from datetime import datetime
 from models.payment_models import WebhookEvent
-from supabase import Client
 from product_serv import stripe_product_sync as sps
 import ios.io_db as io_db
-from email_serv.email_processor import send_new_subscription_email, send_order_email_to_team
 from payment_serv import payment_processor as pp
 
 # Get Supabase client from config

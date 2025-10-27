@@ -330,11 +330,15 @@ def startup_costs_paid_processing(subscription_id: str, event_data: dict):
         team_email_subject = f"New Subscription: {customer_email}"
         
         # ONLY FOR STARTUP COSTS
+
+        # Get customer address
+        subscription_address_res = io_db.get_subscription_address(subscription_id)
         # send confirmation email to team
         email_processor.send_order_email_to_team(
             subject=team_email_subject,
             customer_email=customer_email,
             customer_name=customer_name,
+            customer_address=subscription_address_res,
             items=product_details
         )
         # Send notification email to team

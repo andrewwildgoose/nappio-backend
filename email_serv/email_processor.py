@@ -3,6 +3,8 @@ import logging
 from dotenv import load_dotenv
 from mailersend import emails
 
+import email_serv.email_utils as email_utils
+
 # Frontend URL
 FRONTEND_URL = os.environ.get('FRONTEND_URL')
 
@@ -393,13 +395,16 @@ def send_subscription_payment_active_email(to_email: str, first_name: str, subsc
         logger.exception(f"Failed to send email to {to_email}: {str(e)}")
         return {"status": 500, "error": str(e)}
 
-def send_meeting_confirm_and_sub_checkout_email(to_email: str, first_name: str, meeting_date: str, checkout_builder_link: str):
+def send_meeting_confirm_and_sub_checkout_email(to_email: str, first_name: str, meeting_date: str, checkout_builder_link: str, subscription_address_res: dict):
     """
     Send a meeting confirmation and subscription checkout email to the specified recipient using MailerSend.
     """
     logger.info(f"Sending meeting confirmation and subscription checkout email to {to_email}")
 
     try:
+        # Format the address for email
+        formatted_address = email_utils.format_address_for_email(subscription_address_res)
+
         # Initialize MailerSend email client
         mailer = emails.NewEmail(EMAIL_API_TOKEN)
 
@@ -430,6 +435,8 @@ def send_meeting_confirm_and_sub_checkout_email(to_email: str, first_name: str, 
         <h2>Meeting Confirmation</h2>
         <p>Dear {first_name},</p>
         <p>Your meeting is confirmed for {meeting_date}.</p>
+        <p>Location Address:</p>
+        <p>{formatted_address}</p>
         <p>Please complete your subscription by clicking the link below:</p>
         <p><a href="{checkout_builder_link}">Complete Subscription</a></p>
         """
@@ -441,6 +448,9 @@ def send_meeting_confirm_and_sub_checkout_email(to_email: str, first_name: str, 
         Dear {first_name},
 
         Your meeting is confirmed for {meeting_date}.
+
+        Location Address:
+        {formatted_address}
 
         Please complete your subscription by clicking the link below:
 
@@ -459,12 +469,15 @@ def send_meeting_confirm_and_sub_checkout_email(to_email: str, first_name: str, 
         logger.exception(f"Failed to send email to {to_email}: {str(e)}")
         return {"status": 500, "error": str(e)}
 
-def send_order_email_to_team(subject: str, customer_email: str, customer_name: str, items: list[dict]):
+def send_order_email_to_team(subject: str, customer_email: str, customer_name: str, customer_address: dict, items: list[dict]):
     """
     Send an email to the internal team using MailerSend.
     """
     try:
         logger.info(f"Sending email to team with subject: {subject}")
+
+        formatted_address = email_utils.format_address_for_email(customer_address)
+
 
         mailer = emails.NewEmail(EMAIL_API_TOKEN)
         mail_body = {}
@@ -487,7 +500,8 @@ def send_order_email_to_team(subject: str, customer_email: str, customer_name: s
         <h2>New Order Received</h2>
 
         <p><strong>Customer:</strong> {customer_name}<br>
-        <strong>Email:</strong> {customer_email}</p>
+        <strong>Email:</strong> {customer_email}<br>
+        <strong>Location Address:</strong><br>{formatted_address}</p>
 
         <h3>Items:</h3>
         <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
@@ -510,16 +524,22 @@ def send_order_email_to_team(subject: str, customer_email: str, customer_name: s
 
         html_content += f"</table>"
 
+        html_content += f"<p><a href=\"{ADMIN_DASHBOARD_URL}\">Go to Admin Dashboard</a></p>"
+
+
         # Plain text content
         plaintext_content = f"""
             New Order Received
 
             Customer: {customer_name}
             Email: {customer_email}
+            Location Address: {formatted_address}
 
             Items:
             {'=' * 80}
             {' ' * 2}Item{' ' * 26}Quantity{' ' * 5}Cost{' ' * 7}
+
+            Go to Admin Dashboard: {ADMIN_DASHBOARD_URL}
         """
 
         for item in items:
@@ -538,7 +558,7 @@ def send_order_email_to_team(subject: str, customer_email: str, customer_name: s
         logger.exception(f"Failed to send email to {TEAM_EMAIL}: {str(e)}")
         return {"status": 500, "error": str(e)}
     
-def send_meeting_confirm_to_team(meeting_date: str, customer_name: str, customer_email: str, address):
+def send_meeting_confirm_to_team(meeting_date: str, customer_name: str, customer_email: str, address: dict):
     """
     Send a meeting confirmation email to the internal team using MailerSend.
     """
@@ -547,8 +567,14 @@ def send_meeting_confirm_to_team(meeting_date: str, customer_name: str, customer
 
         mailer = emails.NewEmail(EMAIL_API_TOKEN)
 
+        formatted_address = email_utils.format_address_for_email(address)
+
         mail_body = {}
-        mailer.set_mail_from(TEAM_EMAIL, mail_body)
+        mail_from = {
+            "name": SERVICE_NAME,
+            "email": TEAM_EMAIL
+        }
+        mailer.set_mail_from(mail_from, mail_body)
         mailer.set_mail_to([{"name": "Nappio Team", "email": TEAM_EMAIL}], mail_body)
         mailer.set_subject("Meeting Confirmation", mail_body)
 
@@ -556,6 +582,9 @@ def send_meeting_confirm_to_team(meeting_date: str, customer_name: str, customer
         <h2>Meeting Confirmation</h2>
         <p>Dear Team,</p>
         <p>A meeting has been scheduled for {customer_name} ({customer_email}) on {meeting_date}.</p>
+        <p>Location Address:</p>
+        <p>{formatted_address}</p>
+        <a href="{ADMIN_DASHBOARD_URL}">Go to Admin Dashboard</a>
         """
         mailer.set_html_content(html_content, mail_body)
 
@@ -565,6 +594,11 @@ def send_meeting_confirm_to_team(meeting_date: str, customer_name: str, customer
         Dear Team,
 
         A meeting has been scheduled for {customer_name} ({customer_email}) on {meeting_date}.
+        
+        Location Address:
+        {formatted_address}
+
+        Go to Admin Dashboard: {ADMIN_DASHBOARD_URL}
         """
         mailer.set_plaintext_content(plaintext_content, mail_body)
 

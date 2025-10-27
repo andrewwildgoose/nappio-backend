@@ -1,10 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from typing import List
 import logging
 
 # Get Supabase client from config
 from config.supabase import get_supabase, get_supabase_service_role
-from supabase import Client
 
 from ios import io_db
 from models.admin_models import SubscriptionDashboardResponse, SubscriptionProgressUpdate
@@ -60,9 +59,6 @@ async def admin_update_subscription_progress(update: SubscriptionProgressUpdate)
         #TODO:Add address in to both emails for meeting confirmation
         # send email to customer confirming meeting date & with link to trigger checkout building
         meeting_confirmation_process(supabase, update.subscription_id, update.meeting_date)
-
-        # email team to confirm meeting date
-
 
         return {"message": "Subscription progress updated"}
     except Exception as e:

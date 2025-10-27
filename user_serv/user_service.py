@@ -327,6 +327,13 @@ def meeting_confirmation_process(supabase: Client, subscription_id: str, meeting
 
         # get user email & name from user id if needed
         user_info = io_db.get_user_by_subscription_id(supabase, subscription_id)
+
+        meeting_date_str = meeting_date.strftime("%A, %B %d, %Y at %I:%M %p")
+
+        subscription_address_res = io_db.get_subscription_address(subscription_id)
+
+        logger.debug(f"meeting_confirmation_process(): Retrieved subscription address: {subscription_address_res}")
+
         if user_info:
             logger.debug(f"meeting_confirmation_process(): Retrieved user info: {user_info}")
             user_email = user_info.get("email")
@@ -337,9 +344,11 @@ def meeting_confirmation_process(supabase: Client, subscription_id: str, meeting
                 email_processor.send_meeting_confirm_and_sub_checkout_email(
                     user_email, 
                     user_name, 
-                    meeting_date, 
-                    checkout_trigger_link
+                    meeting_date_str, 
+                    checkout_trigger_link,
+                    subscription_address_res
                 )
+                email_processor.send_meeting_confirm_to_team(meeting_date_str, user_name, user_email, subscription_address_res)
                 io_db.update_subscription_progress_admin(
                     subscription_id=subscription_id,
                     status="checkout_sent"
