@@ -326,20 +326,24 @@ async def start_subscription(
     try:
         logger.debug(f"start_subscription(): Received request: {request.model_dump()}")
 
+        if request.addressId:
+            logger.debug(f"start_subscription(): Using existing address ID: {request.addressId}")
+            address_id = request.addressId
+        else:
+            logger.debug("start_subscription(): No existing address ID provided, creating new address")
 
+            # Build insert the address for the subscription
+            address_obj = user_service.AddUserAddressRequest(
+                address_line_1=request.address["address_line_1"],
+                address_line_2=request.address.get("address_line_2"),
+                city=request.address["city"],
+                postcode=request.address["postcode"],
+                country=request.address["country"],
+                address_notes=request.address.get("address_notes")
+            )
+            addressResponse = user_service.add_user_address(address_obj, user.id)
 
-        # Build insert the address for the subscription
-        address_obj = user_service.AddUserAddressRequest(
-            address_line_1=request.address["address_line_1"],
-            address_line_2=request.address.get("address_line_2"),
-            city=request.address["city"],
-            postcode=request.address["postcode"],
-            country=request.address["country"],
-            address_notes=request.address.get("address_notes")
-        )
-        addressResponse = user_service.add_user_address(address_obj, user.id)
-
-        address_id = str(addressResponse.address.id)
+            address_id = str(addressResponse.address.id)
 
         # Add subscription to user_subscription table -> get subscription_id
         subscription = io_db.insert_user_subscription(

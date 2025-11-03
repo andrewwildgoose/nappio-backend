@@ -5,7 +5,7 @@ from typing import Optional
 import stripe
 from supabase import Client
 from gotrue import User
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from email_serv import email_processor
 from ios import io_db
@@ -33,9 +33,19 @@ class CreateSubscriptionRequest(BaseModel):
     babyBirthdate: str  # Will receive as YYYY-MM-DD string
     babyWeight: float  # Changed from Decimal since we're receiving a float
     wantNappyWraps: bool
-    address: dict  # Changed from UserAddress since we're receiving a plain dict
+    address: Optional[dict] = None  # Address dict for new address
+    addressId: Optional[str] = None  # ID for existing address
     cancelUrl: Optional[str] = '/'
     metadata: Optional[dict] = None  # Optional metadata to pass to the payment provider
+
+    @model_validator(mode='after')
+    def check_address_or_address_id(self):
+        """Ensure either address or addressId is provided, but not both."""
+        if self.address is None and self.addressId is None:
+            raise ValueError('Either address or addressId must be provided')
+        if self.address is not None and self.addressId is not None:
+            raise ValueError('Cannot provide both address and addressId')
+        return self
 
 class PaymentDetailsRequest(BaseModel):
     session_id: str

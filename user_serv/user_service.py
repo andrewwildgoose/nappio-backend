@@ -270,7 +270,7 @@ def delete_user_address(address_id: UUID, user_id: UUID) -> DeleteAddressRespons
     """
     try:
         response = supabase.table('user_addresses').delete().eq('id', str(address_id)).eq('user_id', str(user_id)).execute()
-        if response.status_code == 204:
+        if response.status_code == 200:
             logger.debug(f"delete_user_address(): Successfully deleted address {address_id}")
             return DeleteAddressResponse(success=True, message="Address deleted successfully.")
         else:
