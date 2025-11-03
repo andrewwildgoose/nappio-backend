@@ -61,11 +61,29 @@ def send_confirmation_email(to_email: str, first_name: str, confirmation_link: s
         
         # Set email content (HTML and plain text)
         html_content = f"""
-        <p>Hi {first_name},</p>
-        <p>Thank you for signing up! Please confirm your email by clicking the link below:</p>
-        <p><a href="{confirmation_link}">Confirm Email</a></p>
-        <p>If you didn't sign up, you can ignore this email.</p>
-        <p>Best,<br>The {SERVICE_NAME} Team</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f3ed;">
+            <h2 style="color: #262625;">Confirm Your Email</h2>
+            <p>Hi {first_name},</p>
+            <p>Thank you for signing up! Please confirm your email by clicking the button below:</p>
+            <div style="margin: 30px 0; text-align: center;">
+                <a href="{confirmation_link}" 
+                   style="display: inline-block; 
+                          background-color: #7cc4a7; 
+                          color: #262625; 
+                          font-size: 20px; 
+                          font-weight: bold; 
+                          padding: 16px 32px; 
+                          text-decoration: none; 
+                          border-radius: 0px; 
+                          box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    Confirm Email
+                </a>
+            </div>
+            <p style="color: #666; font-size: 14px;">If the button doesn't work, copy and paste this link into your browser:<br>
+            <a href="{confirmation_link}" style="color: #7cc4a7; word-break: break-all;">{confirmation_link}</a></p>
+            <p>If you didn't sign up, you can ignore this email.</p>
+            <p>Best,<br>The {SERVICE_NAME} Team</p>
+        </div>
         """
         plaintext_content = f"""
         Hi {first_name},
@@ -150,7 +168,8 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
 
         # Set email content (HTML)
         html_content = f"""
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f3ed;">
+            <h2 style="color: #262625;">Subscription Confirmation</h2>
             <p>Hi {first_name},</p>
             <p>Congratulations on starting your subscription journey with Nappio!</p>
         """
@@ -195,7 +214,20 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
         html_content += f"""
             <p>We'll be in touch to arrange your onboarding session with a member of our team.</p>
             <p>Best regards,<br>The {SERVICE_NAME} Team</p>
-            <a href="{FRONTEND_URL}">Visit our website</a>
+            <div style="margin: 30px 0; text-align: center;">
+                <a href="{FRONTEND_URL}" 
+                   style="display: inline-block; 
+                          background-color: #aedbd9; 
+                          color: #262625; 
+                          font-size: 16px; 
+                          font-weight: bold; 
+                          padding: 12px 24px; 
+                          text-decoration: none; 
+                          border-radius: 0px; 
+                          box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    Visit Our Website
+                </a>
+            </div>
         </div>
         """
 
@@ -304,7 +336,8 @@ def send_subscription_payment_active_email(to_email: str, first_name: str, subsc
         
         # Set email content (HTML)
         html_content = f"""
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f3ed;">
+            <h2 style="color: #262625;">Subscription Activated!</h2>
             <p>Hi {first_name},</p>
             <p>Congratulations on activating your subscription with Nappio!</p>
         """
@@ -333,7 +366,20 @@ def send_subscription_payment_active_email(to_email: str, first_name: str, subsc
         html_content += f"""
             <p>Let us know if you have any questions or need assistance.</p>
             <p>Best regards,<br>The {SERVICE_NAME} Team</p>
-            <a href="{FRONTEND_URL}">Visit our website</a>
+            <div style="margin: 30px 0; text-align: center;">
+                <a href="{FRONTEND_URL}" 
+                   style="display: inline-block; 
+                          background-color: #aedbd9; 
+                          color: #262625; 
+                          font-size: 16px; 
+                          font-weight: bold; 
+                          padding: 12px 24px; 
+                          text-decoration: none; 
+                          border-radius: 0px; 
+                          box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    Visit Our Website
+                </a>
+            </div>
         </div>
         """
 
@@ -432,13 +478,30 @@ def send_meeting_confirm_and_sub_checkout_email(to_email: str, first_name: str, 
 
         # Set email content
         html_content = f"""
-        <h2>Meeting Confirmation</h2>
-        <p>Dear {first_name},</p>
-        <p>Your meeting is confirmed for {meeting_date}.</p>
-        <p>Location Address:</p>
-        <p>{formatted_address}</p>
-        <p>Please complete your subscription by clicking the link below:</p>
-        <p><a href="{checkout_builder_link}">Complete Subscription</a></p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f3ed;">
+            <h2 style="color: #262625;">Meeting Confirmation</h2>
+            <p>Dear {first_name},</p>
+            <p>Your meeting is confirmed for <strong>{meeting_date}</strong>.</p>
+            <p><strong>Location Address:</strong></p>
+            <p style="margin-left: 20px; background-color: #f4f3ed; padding: 10px; border-left: 4px solid #f7b18a;">{formatted_address}</p>
+            <p>Please complete your subscription by clicking the button below:</p>
+            <div style="margin: 30px 0; text-align: center;">
+                <a href="{checkout_builder_link}" 
+                   style="display: inline-block; 
+                          background-color: #7cc4a7; 
+                          color: #262625; 
+                          font-size: 20px; 
+                          font-weight: bold; 
+                          padding: 16px 32px; 
+                          text-decoration: none; 
+                          border-radius: 0px; 
+                          box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    Complete Subscription
+                </a>
+            </div>
+            <p style="color: #666; font-size: 14px;">If the button doesn't work, copy and paste this link into your browser:<br>
+            <a href="{checkout_builder_link}" style="color: #7cc4a7; word-break: break-all;">{checkout_builder_link}</a></p>
+        </div>
         """
         mailer.set_html_content(html_content, mail_body)
 
@@ -497,20 +560,23 @@ def send_order_email_to_team(subject: str, customer_email: str, customer_name: s
 
         # HTML Content
         html_content = f"""
-        <h2>New Order Received</h2>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f3ed;">
+            <h2 style="color: #262625;">New Order Received</h2>
 
-        <p><strong>Customer:</strong> {customer_name}<br>
-        <strong>Email:</strong> {customer_email}<br>
-        <strong>Location Address:</strong><br>{formatted_address}</p>
+            <p><strong>Customer:</strong> {customer_name}<br>
+            <strong>Email:</strong> {customer_email}</p>
+            
+            <p><strong>Location Address:</strong></p>
+            <p style="margin-left: 20px; background-color: #f4f3ed; padding: 10px; border-left: 4px solid #f7b18a;">{formatted_address}</p>
 
-        <h3>Items:</h3>
-        <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
-            <tr style="background-color: #f7b18a;">
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Quantity</th>
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Item Cost</th>
+            <h3 style="color: #262625;">Items:</h3>
+            <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
+                <tr style="background-color: #f7b18a;">
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Quantity</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Item Cost</th>
 
-            </tr>
+                </tr>
         """
 
         for item in items:
@@ -522,9 +588,24 @@ def send_order_email_to_team(subject: str, customer_email: str, customer_name: s
                 <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['cost']}</td>
             </tr>"""
 
-        html_content += f"</table>"
-
-        html_content += f"<p><a href=\"{ADMIN_DASHBOARD_URL}\">Go to Admin Dashboard</a></p>"
+        html_content += f"""
+            </table>
+            <div style="margin: 30px 0; text-align: center;">
+                <a href="{ADMIN_DASHBOARD_URL}" 
+                   style="display: inline-block; 
+                          background-color: #f7b18a; 
+                          color: #262625; 
+                          font-size: 18px; 
+                          font-weight: bold; 
+                          padding: 14px 28px; 
+                          text-decoration: none; 
+                          border-radius: 0px; 
+                          box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    Go to Admin Dashboard
+                </a>
+            </div>
+        </div>
+        """
 
 
         # Plain text content
@@ -579,12 +660,27 @@ def send_meeting_confirm_to_team(meeting_date: str, customer_name: str, customer
         mailer.set_subject("Meeting Confirmation", mail_body)
 
         html_content = f"""
-        <h2>Meeting Confirmation</h2>
-        <p>Dear Team,</p>
-        <p>A meeting has been scheduled for {customer_name} ({customer_email}) on {meeting_date}.</p>
-        <p>Location Address:</p>
-        <p>{formatted_address}</p>
-        <a href="{ADMIN_DASHBOARD_URL}">Go to Admin Dashboard</a>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f3ed;">
+            <h2 style="color: #262625;">Meeting Confirmation</h2>
+            <p>Dear Team,</p>
+            <p>A meeting has been scheduled for <strong>{customer_name}</strong> ({customer_email}) on <strong>{meeting_date}</strong>.</p>
+            <p><strong>Location Address:</strong></p>
+            <p style="margin-left: 20px; background-color: #f4f3ed; padding: 10px; border-left: 4px solid #f7b18a;">{formatted_address}</p>
+            <div style="margin: 30px 0; text-align: center;">
+                <a href="{ADMIN_DASHBOARD_URL}" 
+                   style="display: inline-block; 
+                          background-color: #f7b18a; 
+                          color: #262625; 
+                          font-size: 18px; 
+                          font-weight: bold; 
+                          padding: 14px 28px; 
+                          text-decoration: none; 
+                          border-radius: 0px; 
+                          box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    Go to Admin Dashboard
+                </a>
+            </div>
+        </div>
         """
         mailer.set_html_content(html_content, mail_body)
 
@@ -640,21 +736,22 @@ def send_subscription_payment_active_to_team(customer_email: str, customer_name:
         
         # HTML Content
         html_content = f"""
-        <h2>New Subscription Active</h2>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f3ed;">
+            <h2 style="color: #262625;">New Subscription Active</h2>
 
-        <p><strong>Customer:</strong> {customer_name}<br>
-        <strong>Email:</strong> {customer_email}</p>
+            <p><strong>Customer:</strong> {customer_name}<br>
+            <strong>Email:</strong> {customer_email}</p>
 
-        <p>This customer has activated their subscription with the following items:</p>
+            <p>This customer has activated their subscription with the following items:</p>
 
-        <h3>Items:</h3>
-        <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
-            <tr style="background-color: #f7b18a;">
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Quantity</th>
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Item Cost</th>
+            <h3 style="color: #262625;">Items:</h3>
+            <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
+                <tr style="background-color: #f7b18a;">
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Quantity</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Item Cost</th>
 
-            </tr>
+                </tr>
         """
 
         for item in items:
@@ -666,13 +763,28 @@ def send_subscription_payment_active_to_team(customer_email: str, customer_name:
                 <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['cost']}</td>
             </tr>"""
 
-        html_content += f"</table>"
-
-        html_content += f"<p><a href=\"{ADMIN_DASHBOARD_URL}\">Go to Admin Dashboard</a></p>"
+        html_content += f"""
+            </table>
+            <div style="margin: 30px 0; text-align: center;">
+                <a href="{ADMIN_DASHBOARD_URL}" 
+                   style="display: inline-block; 
+                          background-color: #f7b18a; 
+                          color: #262625; 
+                          font-size: 18px; 
+                          font-weight: bold; 
+                          padding: 14px 28px; 
+                          text-decoration: none; 
+                          border-radius: 0px; 
+                          box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    Go to Admin Dashboard
+                </a>
+            </div>
+        </div>
+        """
 
         # Plain text content
         plaintext_content = f"""
-            New Order Received
+            New Subscription Active
 
             Customer: {customer_name}
             Email: {customer_email}

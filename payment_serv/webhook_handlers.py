@@ -127,7 +127,7 @@ async def handle_subscription_updated(event: WebhookEvent) -> None:
             cancelled_at=datetime.fromtimestamp(subscription.canceled_at) if subscription.canceled_at else None
         )
         
-        logger.info(f"Updated subscription for user {subscription.metadata['user_id']}")
+        logger.info(f"Updated subscription {subscription.metadata['subscription_id']}")
         
     except Exception as e:
         logger.error(f"Error handling customer.subscription.updated: {str(e)}")
