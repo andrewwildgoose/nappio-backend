@@ -32,7 +32,9 @@ class CheckoutSessionResponse(BaseModel):
 class CreateSubscriptionRequest(BaseModel):
     babyBirthdate: str  # Will receive as YYYY-MM-DD string
     babyWeight: float  # Changed from Decimal since we're receiving a float
-    wantNappyWraps: bool
+    # Removed Nappy Wraps selection - leaving in as may reintroduce later
+    #wantNappyWraps: bool
+    serviceLevel: str  # e.g., 'full-time', 'part-time'
     address: Optional[dict] = None  # Address dict for new address
     addressId: Optional[str] = None  # ID for existing address
     cancelUrl: Optional[str] = '/'
