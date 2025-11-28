@@ -22,6 +22,7 @@ COPY email_serv/email_utils.py email_serv/
 COPY ios/io_db.py ios/
 COPY models/admin_models.py models/
 COPY models/payment_models.py models/
+COPY models/user_models.py models/
 COPY payment_serv/webhook_handlers.py payment_serv/
 COPY payment_serv/payment_processor.py payment_serv/
 COPY product_serv/stripe_product_sync.py product_serv/
