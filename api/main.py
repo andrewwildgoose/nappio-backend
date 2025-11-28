@@ -17,12 +17,27 @@ import stripe
 # Custom imports
 import ios.io_db as io_db
 import product_serv.subscription_builder as sub_builder
-from email_serv.email_processor import send_confirmation_email
-from payment_serv.payment_processor import CheckoutSessionRequest, CheckoutSessionResponse, CreateSubscriptionRequest, PaymentDetailsRequest, PaymentDetailsResponse
+from email_serv.email_processor import send_confirmation_email, send_newsletter_signup_to_team
 import payment_serv.payment_processor as pa
 from payment_serv.webhook_handlers import WebhookEvent, webhook_router
 import user_serv.user_service as user_service
 import admin_serv.subscriptions as subscriptions_admin
+from models.user_models import (
+    SubscriptionDetailsResponse,
+    AddUserAddressRequest,
+    AddUserAddressResponse,
+    DeleteAddressResponse,
+    AssignSubscriptionAddressRequest,
+    SubscriptionRequest
+)
+from models.payment_models import (
+    CheckoutSessionResponse,
+    CreateSubscriptionRequest,
+    PaymentDetailsRequest,
+    PaymentDetailsResponse,
+    PauseSubscriptionRequest,
+    PauseSubscriptionResponse
+)
 
 # Get Supabase client from config
 from config.supabase import get_supabase
@@ -132,6 +147,15 @@ def subscribe_to_newsletter(subscriber: io_db.NewsletterSubscriber):
         if email_response.get("status") != 200:
             logger.warning(f"subscribe_to_newsletter(): Failed to send confirmation email to {subscriber.email}")
         
+        team_response = send_newsletter_signup_to_team(
+            subscriber_email=subscriber.email,
+            subscriber_name=subscriber.first_name,
+            subscriber_postcode=subscriber.postcode if hasattr(subscriber, 'postcode') else None
+        )
+
+        if team_response.get("status") != 200:
+            logger.warning("subscribe_to_newsletter(): Failed to send signup notification to team")
+        
         return result
     except Exception as e:
         if "duplicate key" in str(e).lower():
@@ -193,7 +217,7 @@ async def get_authenticated_user(request: Request):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 # User routes
-@user_router.get("/user-subscriptions", response_model=list[user_service.SubscriptionDetailsResponse])
+@user_router.get("/user-subscriptions", response_model=list[SubscriptionDetailsResponse])
 async def get_user_subscriptions(user = Depends(get_authenticated_user)):
     """
     Get a list of subscriptions for the authenticated user
@@ -232,9 +256,9 @@ async def get_user_addresses(user = Depends(get_authenticated_user)):
         logger.error(f"Error getting user addresses: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@user_router.post("/add-address", response_model=user_service.AddUserAddressResponse)
+@user_router.post("/add-address", response_model=AddUserAddressResponse)
 async def add_user_address(
-    request: user_service.AddUserAddressRequest,
+    request: AddUserAddressRequest,
     user = Depends(get_authenticated_user)
 ):
     """
@@ -254,7 +278,7 @@ async def add_user_address(
         logger.error(f"Error adding user address: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@user_router.delete("/delete-address/{address_id}", response_model=user_service.DeleteAddressResponse)
+@user_router.delete("/delete-address/{address_id}", response_model=DeleteAddressResponse)
 async def delete_user_address(
     address_id: str,
     user = Depends(get_authenticated_user)
@@ -282,7 +306,7 @@ async def delete_user_address(
 
 @user_router.post("/assign-subscription-address", response_model=dict)
 async def assign_subscription_address(
-    request: user_service.AssignSubscriptionAddressRequest,
+    request: AssignSubscriptionAddressRequest,
     user = Depends(get_authenticated_user)
 ):
     try:
@@ -333,7 +357,7 @@ async def start_subscription(
             logger.debug("start_subscription(): No existing address ID provided, creating new address")
 
             # Build insert the address for the subscription
-            address_obj = user_service.AddUserAddressRequest(
+            address_obj = AddUserAddressRequest(
                 address_line_1=request.address["address_line_1"],
                 address_line_2=request.address.get("address_line_2"),
                 city=request.address["city"],
@@ -395,9 +419,52 @@ async def start_subscription(
         logger.error(f"start_subscription(): Error starting subscription: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@payment_router.post("/pause-subscription", response_model=PauseSubscriptionResponse)
+async def pause_subscription(
+    request: PauseSubscriptionRequest,
+    user = Depends(get_authenticated_user)
+):
+    """
+    Docstring for pause_subscription
+    
+    :param request: Request object to pause a subscription
+    :type request: PauseSubscriptionRequest
+    :param user: User requesting the pause
+    """
+    try:
+        logger.debug(f"pause_subscription(): Received request: {request.model_dump()}")
+
+        # Validate that the subscription belongs to the user
+        subscription = user_service.get_subscription(request.subscription_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        if subscription.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to pause this subscription")
+
+        # Convert pause_until string to datetime if it's provided
+        pause_until_datetime = None
+        if request.pause_until:
+            pause_until_datetime = datetime.fromisoformat(request.pause_until)
+        
+        # Pause the subscription
+        pa.pause_subscription(
+            subscription_id=request.subscription_id,
+            stripe_subscription_id=subscription.stripe_subscription_id,
+            pause_until=pause_until_datetime
+        )
+        logger.debug(f"pause_subscription(): Paused subscription {request.subscription_id} until {request.pause_until}")
+
+        return PauseSubscriptionResponse(message="Subscription paused successfully")
+
+
+    except Exception as e:
+        logger.error(f"pause_subscription(): Error pausing subscription: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
 @payment_router.post("/create-checkout-from-subscription", response_model=CheckoutSessionResponse)
 async def create_subscription_checkout(
-    request: user_service.SubscriptionRequest,
+    request: SubscriptionRequest,
     user = Depends(get_authenticated_user)
 ):
     """

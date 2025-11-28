@@ -117,8 +117,10 @@ async def handle_subscription_updated(event: WebhookEvent) -> None:
         logger.info(f"Handling customer.subscription.updated for subscription ID: {event.data['object']['id']}")
         logger.debug(f"Subscription data: {event.data['object']}")
         subscription = event.data['object']
-        subscription_item = subscription['items']['data'][0]
+        subscription_items = subscription['items']['data']
+        subscription_item = subscription_items[0]
 
+        # Update STATUS, LAST_PAYMENT_DATE, NEXT_PAYMENT_DATE, CANCELLED_AT in user_subscriptions table in supabase
         io_db.update_user_subscription(
             subscription_id=subscription.metadata['subscription_id'],
             status=subscription.status,
@@ -126,7 +128,49 @@ async def handle_subscription_updated(event: WebhookEvent) -> None:
             next_payment_date=datetime.fromtimestamp(subscription_item.current_period_end),
             cancelled_at=datetime.fromtimestamp(subscription.canceled_at) if subscription.canceled_at else None
         )
+
+        # Check if subscription items have changed
+
+        # get current subscription items for comparison
+        current_items = io_db.get_subscription_items(subscription.metadata['subscription_id']) 
+
+        logger.debug(f"Current subscription items for subscription ID {subscription.metadata['subscription_id']}: {current_items}")
+
+        # Build new subscription items list
+        new_products = io_db.get_products_by_stripe_product_ids(
+            [item.price.product for item in subscription_items])
         
+        # Add internal product IDs and get quantities from Stripe subscription items
+        new_item_details = []
+        for item in subscription_items:
+            for product in new_products:
+                if item.price.product == product['stripe_product_id']:
+                    new_item_details.append({
+                        'product_id': product['id'],
+                        'quantity': item.quantity
+                    })
+                    break
+        
+        # Check if there are any differences between current and new items
+        update_products = False
+
+        for current_item in current_items:
+            matched = False
+            for new_item in new_item_details:
+                if current_item['product_id'] == new_item['product_id'] and current_item['quantity'] == new_item['quantity']:
+                    matched = True
+                    break
+            if not matched:
+                update_products = True
+                break
+
+        if update_products:
+            io_db.update_subscription_items(
+                subscription_id=subscription.metadata['subscription_id'],
+                new_items=new_item_details
+            )
+            logger.info(f"Updated subscription items for subscription {subscription.metadata['subscription_id']}")
+
         logger.info(f"Updated subscription {subscription.metadata['subscription_id']}")
         
     except Exception as e:

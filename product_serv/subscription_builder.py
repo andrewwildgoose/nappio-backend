@@ -1,7 +1,7 @@
 from datetime import datetime
 from supabase import Client
 from ios.io_db import get_stripe_price_ids
-from payment_serv.payment_processor import CreateSubscriptionRequest
+from models.payment_models import CreateSubscriptionRequest
 import logging
 
 logger = logging.getLogger('uvicorn.error')

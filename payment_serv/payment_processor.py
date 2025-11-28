@@ -3,12 +3,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import stripe
-from supabase import Client
 from gotrue import User
-from pydantic import BaseModel, model_validator
 
 from email_serv import email_processor
 from ios import io_db
+from models.payment_models import (
+    CheckoutSessionResponse,
+    PaymentDetailsResponse
+)
 
 # Get Supabase client from config
 from config.supabase import get_supabase
@@ -17,44 +19,6 @@ logger = logging.getLogger('uvicorn.error')
 
 # Initialize Supabase client
 supabase = get_supabase()
-
-class CheckoutSessionRequest(BaseModel):
-    priceId: str
-    addressId: str
-    cancelUrl: Optional[str] = '/'
-    # userId: str
-
-class CheckoutSessionResponse(BaseModel):
-    checkout_url: str
-    session_id: str
-    metadata: Optional[dict] = None
-
-class CreateSubscriptionRequest(BaseModel):
-    babyBirthdate: str  # Will receive as YYYY-MM-DD string
-    babyWeight: float  # Changed from Decimal since we're receiving a float
-    # Removed Nappy Wraps selection - leaving in as may reintroduce later
-    #wantNappyWraps: bool
-    serviceLevel: str  # e.g., 'full-time', 'part-time'
-    address: Optional[dict] = None  # Address dict for new address
-    addressId: Optional[str] = None  # ID for existing address
-    cancelUrl: Optional[str] = '/'
-    metadata: Optional[dict] = None  # Optional metadata to pass to the payment provider
-
-    @model_validator(mode='after')
-    def check_address_or_address_id(self):
-        """Ensure either address or addressId is provided, but not both."""
-        if self.address is None and self.addressId is None:
-            raise ValueError('Either address or addressId must be provided')
-        if self.address is not None and self.addressId is not None:
-            raise ValueError('Cannot provide both address and addressId')
-        return self
-
-class PaymentDetailsRequest(BaseModel):
-    session_id: str
-
-class PaymentDetailsResponse(BaseModel):
-    amount_total: int
-    customer_email: str
 
 def get_or_create_customer(email: str) -> stripe.Customer:
     """
@@ -413,4 +377,23 @@ def subscription_paid_processing(subscription_id: str, event_data: dict):
         )
     except Exception as e:
         logger.error(f"Error sending notification email to team: {str(e)}")
+        raise
+
+def pause_subscription(subscription_id: str, stripe_subscription_id: str, pause_until: Optional[datetime] = None) -> None:
+    """
+    Placeholder for pausing a subscription
+    """
+    try:
+        logger.info(f"pause_subscription(): Pausing subscription {subscription_id}")
+        # Implement pausing logic here
+        stripe.Subscription.modify(
+            stripe_subscription_id,
+            pause_collection={
+                'behavior': 'void',
+                'resumes_at': int(pause_until.timestamp()) if pause_until else None
+            }
+        )
+        logger.info(f"pause_subscription(): Subscription {subscription_id} paused successfully")
+    except Exception as e:
+        logger.error(f"pause_subscription(): Error pausing subscription {subscription_id}: {str(e)}")
         raise

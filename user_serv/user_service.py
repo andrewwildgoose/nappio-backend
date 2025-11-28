@@ -4,12 +4,18 @@ import stripe
 from datetime import datetime
 from typing import Optional, List
 
-from pydantic import BaseModel
 from supabase import Client
 from uuid import UUID
 
 import ios.io_db as io_db
 import email_serv.email_processor as email_processor
+from models.user_models import (
+    ProductDetails,
+    SubscriptionDetailsResponse,
+    AddUserAddressRequest,
+    AddUserAddressResponse,
+    DeleteAddressResponse,
+)
 
 # Get Supabase client from config
 from config.supabase import get_supabase
@@ -18,62 +24,6 @@ logger = logging.getLogger('uvicorn.error')
 
 # Initialize Supabase client
 supabase = get_supabase()
-
-class ProductDetails(BaseModel):
-    name: str
-    price: float
-    currency: str
-
-class SubscriptionRequest(BaseModel):
-    id: str
-    cancelUrl: Optional[str] = '/'
-
-#TODO: Update this to match the db schema
-class SubscriptionDetailsResponse(BaseModel):
-    id: UUID
-    user_id: Optional[str] = None  # Optional field for user ID if applicable
-    customer_id: Optional[str] = None  # Optional field for customer ID if applicable
-    status: str
-    start_date: datetime
-    end_date: Optional[datetime] = None
-    stripe_subscription_id: Optional[str] = None
-    next_payment_date: Optional[datetime] = None
-    address_id: Optional[UUID] = None  # Optional field for address ID if applicable
-    items: List[ProductDetails] = []  # List of products in the subscription
-
-class UserAddressRequest(BaseModel):
-    id: Optional[UUID] = None  # Optional UUID for existing address
-    user_id: str
-    address_line_1: str
-    address_line_2: Optional[str] = None
-    city: str
-    postcode: str
-    country: str
-    address_notes: Optional[str] = None
-
-class AddUserAddressRequest(BaseModel):
-    address_line_1: str
-    address_line_2: Optional[str] = None
-    city: str
-    postcode: str
-    country: str
-    address_notes: Optional[str] = None
-
-class AddUserAddressResponse(BaseModel):
-    success: bool
-    message: str
-    address: Optional[io_db.UserAddress] = None  # The newly created address object if successful
-
-class DeleteAddressRequest(BaseModel):
-    address_id: UUID  # UUID of the address to delete
-
-class DeleteAddressResponse(BaseModel):
-    success: bool
-    message: str
-
-class AssignSubscriptionAddressRequest(BaseModel):
-    address_id: str
-    subscription_id: str
 
 def get_subscription(subscription_id: str) -> Optional[SubscriptionDetailsResponse]:
     """

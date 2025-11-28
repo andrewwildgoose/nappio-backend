@@ -126,6 +126,81 @@ def send_confirmation_email(to_email: str, first_name: str, confirmation_link: s
         logger.exception(f"Failed to send email to {to_email}: {str(e)}")
         return {"status": 500, "error": str(e)}
     
+def send_newsletter_signup_to_team(subscriber_email: str, subscriber_name: str, subscriber_postcode: str | None = None):
+    """
+    Send a newsletter signup notification email to the internal team using MailerSend.
+    """
+    try:
+        logger.info(f"Sending newsletter signup notification to team for subscriber: {subscriber_name} ({subscriber_email})")
+
+        mailer = emails.NewEmail(EMAIL_API_TOKEN)
+        mail_body = {}
+        mail_from = {
+            "name": SERVICE_NAME,
+            "email": TEAM_EMAIL
+        }
+        mailer.set_mail_from(mail_from, mail_body)
+        recipients = [
+            {
+                "name": "Nappio Team",
+                "email": TEAM_EMAIL
+            }
+        ]
+        mailer.set_mail_to(recipients, mail_body)
+        
+        subject = f"New Newsletter Signup: {subscriber_email}"
+        mailer.set_subject(subject, mail_body)
+        
+        # HTML Content
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f3ed;">
+            <h2 style="color: #262625;">New Newsletter Signup</h2>
+            <p><strong>Subscriber:</strong> {subscriber_name}<br>
+            <strong>Email:</strong> {subscriber_email}<br>
+            <strong>Postcode:</strong> {subscriber_postcode if subscriber_postcode else "N/A"}</p>
+            <p>A new user has signed up for the newsletter.</p>
+            <div style="margin: 30px 0; text-align: center;">
+                <a href="{ADMIN_DASHBOARD_URL}" 
+                   style="display: inline-block; 
+                          background-color: #f7b18a; 
+                          color: #262625; 
+                          font-size: 18px; 
+                          font-weight: bold; 
+                          padding: 14px 28px; 
+                          text-decoration: none; 
+                          border-radius: 0px; 
+                          box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    Go to Admin Dashboard
+                </a>
+            </div>
+        </div>
+        """
+        
+        # Plain text content
+        plaintext_content = f"""
+        New Newsletter Signup
+
+        Subscriber: {subscriber_name}
+        Email: {subscriber_email}
+
+        A new user has signed up for the newsletter.
+
+        Go to Admin Dashboard: {ADMIN_DASHBOARD_URL}
+        """
+        
+        mailer.set_html_content(html_content, mail_body)
+        mailer.set_plaintext_content(plaintext_content, mail_body)
+        
+        response = mailer.send(mail_body)
+        if response.strip() != '202':
+            logger.error(f"Failed to send email to {TEAM_EMAIL}. response: {response}, response type: {type(response)}")
+            return {"response": response}
+        logger.info(f"Email sent successfully to {TEAM_EMAIL}\nresponse: {response}")
+        return {"status": 200, "response": response}
+    except Exception as e:
+        logger.exception(f"Failed to send email to {TEAM_EMAIL}: {str(e)}")
+        return {"status": 500, "error": str(e)}
+
 def send_new_subscription_email(to_email: str, first_name: str, subscription_items: list[dict]):
     """
     Send a subscription confirmation email to the specified recipient using MailerSend.

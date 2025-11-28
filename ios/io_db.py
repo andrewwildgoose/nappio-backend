@@ -295,6 +295,41 @@ def get_subscription_items(subscription_id: str) -> list[dict]:
         logger.error(f"get_subscription_items(): Failed to retrieve subscription items: {str(e)}")
         raise
 
+def update_subscription_items(subscription_id: str, new_items: list[dict]) -> None:
+    """
+    Update subscription items for a given subscription ID by replacing existing items with new ones.
+
+    Args:
+        subscription_id: The ID of the subscription to update
+        new_items: A list of new subscription item dictionaries to insert
+
+    Returns:
+        None
+    """
+    try:
+        # Delete existing subscription items
+        delete_response = supabase.table('subscription_items')\
+            .delete()\
+            .eq("subscription_id", subscription_id)\
+            .execute()
+        
+        logger.debug(f"update_subscription_items(): Deleted existing items for subscription ID {subscription_id}: {delete_response.data}")
+
+        # Insert new subscription items
+        for item in new_items:
+            subscription_item = {
+                "subscription_id": subscription_id,
+                "product_id": item["product_id"],
+                "quantity": item["quantity"]
+            }
+            logger.debug(f"update_subscription_items(): Inserting new subscription item: {subscription_item}")
+            insert_response = supabase.table('subscription_items').insert(subscription_item).execute()
+            logger.debug(f"update_subscription_items(): Inserted data: {insert_response.data}")
+
+    except Exception as e:
+        logger.error(f"update_subscription_items(): Failed to update subscription items: {str(e)}")
+        raise
+
 def update_user_subscription(
     subscription_id: str,
     status: Optional[str] = None,
@@ -697,4 +732,31 @@ def get_subscription_address(subscription_id: str) -> Optional[dict]:
             return None
     except Exception as e:
         logger.error(f"get_subscription_address(): Error fetching address for subscription {subscription_id}: {str(e)}")
+        raise
+
+
+def get_products(product_ids: list[str]) -> Optional[list[dict]]:
+    """
+    Retrieve product details by product ID
+    """
+    try:
+        response = supabase.table('product').select('*').in_('id', product_ids).execute()
+        logger.debug(f"get_products(): Retrieved products for IDs {product_ids}: {response.data}")
+
+        return response.data if response.data else None
+    except Exception as e:
+        logger.error(f"get_product(): Error fetching products with IDs {product_ids}: {str(e)}")
+        raise
+
+def get_products_by_stripe_product_ids(stripe_product_ids: list[str]) -> Optional[list[dict]]:
+    """
+    Retrieve product details by Stripe product ID
+    """
+    try:
+        response = supabase.table('product').select('*').in_('stripe_product_id', stripe_product_ids).execute()
+        logger.debug(f"get_products_by_stripe_product_ids(): Retrieved products for Stripe IDs {stripe_product_ids}: {response.data}")
+
+        return response.data if response.data else None
+    except Exception as e:
+        logger.error(f"get_products_by_stripe_product_ids(): Error fetching products with Stripe IDs {stripe_product_ids}: {str(e)}")
         raise
