@@ -614,8 +614,6 @@ def get_all_subscription_progress(supabase: Client, auth_supabase: Client) -> li
             logger.error("Supabase error fetching subscription_progress: %s", progress_response.error)
             raise RuntimeError(f"Supabase error: {progress_response.error}")
 
-        logger.debug(f"get_subscription_progress(): Retrieved subscription progress data: {progress_response.data}")
-
         # 2. Collect all unique user_ids
         user_ids = set()
         for record in progress_response.data:
@@ -630,7 +628,6 @@ def get_all_subscription_progress(supabase: Client, auth_supabase: Client) -> li
         # 3. Get user info for all user_ids
         users_response = auth_supabase.auth.admin.list_users()
         users = users_response.users if hasattr(users_response, "users") else users_response
-        logger.debug(f"get_subscription_progress(): Retrieved user data: {users}")
 
         # 4. Build a user_id -> user object map
         user_map = {}
@@ -676,7 +673,7 @@ def get_all_subscription_progress(supabase: Client, auth_supabase: Client) -> li
                 last_updated=record.get("last_updated"),
             ))
 
-        logger.debug("get_subscription_progress(): Returning %d dashboard records", len(result))
+        logger.debug(f"get_subscription_progress(): Returning {len(result)} dashboard records")
         return result
 
     except Exception as e:
