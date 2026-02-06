@@ -52,6 +52,7 @@ class PaymentDetailsRequest(BaseModel):
 class PaymentDetailsResponse(BaseModel):
     amount_total: int
     customer_email: str
+    checkout_type: str
 
 class PauseSubscriptionRequest(BaseModel):
     subscription_id: str

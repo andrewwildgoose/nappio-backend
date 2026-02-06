@@ -153,7 +153,6 @@ def insert_checkout_session(
         raise
 
 def update_checkout_session(
-    supabase: Client,
     session_id: str,
     status: str,
     metadata: Optional[dict] = None
@@ -436,7 +435,7 @@ def get_subscription_by_id(subscription_id: str) -> dict | None:
         logger.error(f"get_subscription_by_id(): Error retrieving subscription with ID {subscription_id}: {str(e)}")
         raise Exception(f"Error retrieving subscription with ID {subscription_id}: {str(e)}")
 
-def get_user_subscriptions(supabase: Client, user_id: str):
+def get_user_subscriptions(user_id: str):
     """
     Retrieve all subscriptions for a given user ID
     """
@@ -539,7 +538,7 @@ def insert_user_address(
         logger.error(f"insert_user_address(): Failed to insert address: {str(e)}")
         raise
 
-def get_user_addresses(supabase: Client, user_id: UUID) -> Optional[UserAddress]:
+def get_user_addresses(user_id: UUID) -> Optional[UserAddress]:
     """
     Retrieve all addresses for a given user ID
     """
@@ -552,7 +551,7 @@ def get_user_addresses(supabase: Client, user_id: UUID) -> Optional[UserAddress]
         logger.error(f"get_user_addresses(): Error fetching addresses for user {user_id}: {str(e)}")
         raise
 
-def delete_user_address(supabase: Client, address_id: UUID) -> bool:
+def delete_user_address(address_id: UUID) -> bool:
     """
     Delete a user address by its ID
     """
@@ -583,7 +582,7 @@ def get_subscription_progress(subscription_id: str) -> dict | None:
         logger.error(f"get_subscription_progress(): Error fetching progress for subscription {subscription_id}: {str(e)}")
         raise
 
-def get_all_subscription_progress(supabase: Client, auth_supabase: Client) -> list[SubscriptionDashboardResponse]:
+def get_all_subscription_progress( auth_supabase: Client) -> list[SubscriptionDashboardResponse]:
     """
     Retrieve all subscription progress records joined with user subscription data and user information.
     Returns a list of SubscriptionDashboardResponse.
@@ -680,7 +679,7 @@ def get_all_subscription_progress(supabase: Client, auth_supabase: Client) -> li
         logger.error(f"get_subscription_progress(): Error fetching subscription progress records: {str(e)}")
         raise
 
-def get_user_by_subscription_id(supabase: Client, subscription_id: str) -> Optional[dict]:
+def get_user_by_subscription_id(subscription_id: str) -> Optional[dict]:
     """
     Retrieve user information based on a subscription ID
     """
@@ -730,7 +729,6 @@ def get_subscription_address(subscription_id: str) -> Optional[dict]:
     except Exception as e:
         logger.error(f"get_subscription_address(): Error fetching address for subscription {subscription_id}: {str(e)}")
         raise
-
 
 def get_products(product_ids: list[str]) -> Optional[list[dict]]:
     """

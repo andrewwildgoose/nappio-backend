@@ -212,14 +212,16 @@ def get_payment_completed_details(session_id: str) -> PaymentDetailsResponse:
 
         # Retrieve the session and subscription details
         session = stripe.checkout.Session.retrieve(session_id)
-        amount_total = session['amount_total']
+
+        logger.debug(f"Session details: {session}")
 
         # access      
         logger.info(f"get_subscription_details(): Subscription details fetched for session ID {session_id}")
         
         return PaymentDetailsResponse(
-            amount_total=amount_total,
-            customer_email=session.customer_details.email
+            amount_total=session['amount_total'],
+            customer_email=session.customer_details.email,
+            checkout_type=session.metadata.get('checkout_type', 'unknown')
         )
         
     except Exception as e:
@@ -293,10 +295,13 @@ def startup_costs_paid_processing(subscription_id: str, event_data: dict):
         logger.debug(f"Products in subscription: {product_details}")
 
         # get user email and first name
-        customer_email = event_data['object']['customer_details']['email']
-        customer_name = event_data['object']['customer_details']['name']
-        
-        
+        # customer_email = event_data['object']['customer_details']['email']
+        # customer_name = event_data['object']['customer_details']['name']
+        # Get user from subscription record
+        user = io_db.get_user_by_subscription_id(subscription_id)
+        customer_email = user.get("user_metadata", {}).get("first_name")
+        customer_name = user.get("email")
+
         #TODO: Need to make these conditional on the right kind of checkout session
         # ONLY FOR STARTUP COSTS
         # send confirmation email to customer
