@@ -228,7 +228,7 @@ def get_payment_completed_details(session_id: str) -> PaymentDetailsResponse:
         logger.error(f"Error fetching subscription details: {str(e)}")
         raise
 
-def paid_processing(checkout_type: str, subscription_id: str, event_data: dict) -> None:
+def paid_processing(checkout_type: str, subscription_id: str, event_data: dict, line_items: list) -> None:
     """
     Placeholder function for processing after a payment is made.
     This could include updating user status, sending confirmation emails, etc.
@@ -237,7 +237,7 @@ def paid_processing(checkout_type: str, subscription_id: str, event_data: dict) 
         logger.info(f"Processing payment for checkout type: {checkout_type}")
         match checkout_type:
             case "start_up":
-                startup_costs_paid_processing(subscription_id, event_data)
+                startup_costs_paid_processing(subscription_id, event_data, line_items)
             case "subscription":
                 subscription_paid_processing(subscription_id, event_data)
             case _:
@@ -247,7 +247,7 @@ def paid_processing(checkout_type: str, subscription_id: str, event_data: dict) 
         logger.error(f"paid_processing(): Error processing payment for checkout type {checkout_type}: {str(e)}")
         raise
 
-def startup_costs_paid_processing(subscription_id: str, event_data: dict):
+def startup_costs_paid_processing(subscription_id: str, event_data: dict, line_items: list) -> None:
     """
     Placeholder function for processing after startup costs are paid.
     This could include updating user status, sending confirmation emails, etc.
@@ -271,7 +271,7 @@ def startup_costs_paid_processing(subscription_id: str, event_data: dict):
             .select('*')\
             .eq('subscription_id', subscription_id)\
             .execute()
-        
+
         logger.debug(f"Subscription items: {subscription_items_response.data}")
         
         # Get product details for each subscription item
@@ -292,15 +292,24 @@ def startup_costs_paid_processing(subscription_id: str, event_data: dict):
                     "type": product['type']
                 })
         
+        # Get product details for item in the checkout
+        for item in line_items:
+            product = io_db.get_product_by_stripe_price_id(item['price'])
+            product_details.append({
+                "subscription_id": subscription_id,
+                "item_name": product['name'],
+                "cost": f'{product['currency'].upper()} {product['price'] / 100:.2f}',
+                "quantity": item['quantity'],
+                "type": product['type']
+            })
+
+
         logger.debug(f"Products in subscription: {product_details}")
 
-        # get user email and first name
-        # customer_email = event_data['object']['customer_details']['email']
-        # customer_name = event_data['object']['customer_details']['name']
         # Get user from subscription record
         user = io_db.get_user_by_subscription_id(subscription_id)
-        customer_email = user.get("user_metadata", {}).get("first_name")
-        customer_name = user.get("email")
+        customer_name = user.get("user_metadata", {}).get("first_name")
+        customer_email = user.get("email")
 
         #TODO: Need to make these conditional on the right kind of checkout session
         # ONLY FOR STARTUP COSTS
@@ -335,9 +344,10 @@ def subscription_paid_processing(subscription_id: str, event_data: dict):
     """
 
     try:   
-        # get user email and first name
-        customer_email = event_data['object']['customer_details']['email']
-        customer_name = event_data['object']['customer_details']['name']
+        # Get user from subscription record
+        user = io_db.get_user_by_subscription_id(subscription_id)
+        customer_name = user.get("user_metadata", {}).get("first_name")
+        customer_email = user.get("email")
 
         # Get subscription items
         subscription_items_response = supabase.table('subscription_items')\

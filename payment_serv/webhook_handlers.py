@@ -55,7 +55,6 @@ async def handle_checkout_completed(event: WebhookEvent) -> None:
 
         # Update checkout session status in Supabase & get supabase checkout session record
         supabase_checkout_response = io_db.update_checkout_session(
-            supabase=supabase,
             session_id=event.data['object']['id'],
             status=event.data['object']['status'],
             metadata=event.data['object']['metadata'],
@@ -70,10 +69,13 @@ async def handle_checkout_completed(event: WebhookEvent) -> None:
         # Get the checkout type to determine next steps
         checkout_type = event.data['object']['metadata']['checkout_type']
 
+        line_items = [line_item for line_item in supabase_checkout_response['line_items']]
+
         pp.paid_processing(
             checkout_type, 
             subscription_id, 
-            event.data
+            event.data,
+            line_items
             )
 
         logger.info(f"Updated checkout session status to {event.data['object']['status']} for session ID: {event.data['object']['id']}")

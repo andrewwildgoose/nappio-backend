@@ -244,14 +244,14 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
         # Set email content (HTML)
         html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f3ed;">
-            <h2 style="color: #262625;">Subscription Confirmation</h2>
+            <h2 style="color: #262625;">Sign-up Confirmation</h2>
             <p>Hi {first_name},</p>
             <p>Congratulations on starting your subscription journey with Nappio!</p>
         """
         # Add one-off items table if there are any
         if subscription_items_oneoff:
             html_content += f"""
-            <h3>Thanks for your payment of the set up costs as follows:</h3>
+            <p>Thanks for your payment of the set-up costs as follows:</p>
             <table style="border-collapse: collapse; width: 100%; margin-top: 10px; margin-bottom: 20px;">
                 <tr style="background-color: #f7b18a;">
                     <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
@@ -269,7 +269,10 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
         # Add subscription items table if there are any
         if subscription_items_recurring:
             html_content += f"""
-            <h3>A member of our team will be in touch to arrange your onboarding session. Once that has been confirmed and we have agreed your starting date, we'll reach out to set up the payment for your subscription items:</h3>
+            <h3>Congratulations on signing-up to Nappio!</h3>
+            <p>We will reach out to you by email within 48 hours to arrange your at-home visit and get you started with Nappio. If you don't hear from us, check your spam or feel free to reach out to us at info@nappio.co.uk. We will get back to you ASAP.</p>
+            <h3>Subscription Confirmation</h3>
+
             <table style="border-collapse: collapse; width: 100%; margin-top: 10px; margin-bottom: 20px;">
                 <tr style="background-color: #f7b18a;">
                     <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
@@ -287,12 +290,15 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
 
 
         html_content += f"""
-            <p>We'll be in touch to arrange your onboarding session with a member of our team.</p>
-            <p>Best regards,<br>The {SERVICE_NAME} Team</p>
-            <div style="margin: 30px 0; text-align: center;">
-                <a href="{FRONTEND_URL}" 
-                   style="display: inline-block; 
-                          background-color: #aedbd9; 
+            <p>This weekly payment will only start on the date your first set of nappies are delivered, which we will agree with you over email.
+            <br><br>
+            We can't wait to meet you and your baby.
+            </p>
+            <p>Best regards,
+            <br>The {SERVICE_NAME} Team
+            </p> 
+            <div style="margin: 30px 0; text-align: center;"> 
+                <a href="{FRONTEND_URL}" style="display: inline-block; background-color: #aedbd9;
                           color: #262625; 
                           font-size: 16px; 
                           font-weight: bold; 

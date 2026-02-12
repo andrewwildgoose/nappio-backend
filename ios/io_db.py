@@ -156,7 +156,7 @@ def update_checkout_session(
     session_id: str,
     status: str,
     metadata: Optional[dict] = None
-) -> list | None:
+) -> dict:
     """Update an existing checkout session"""
     try:
         logger.debug(f"update_checkout_session(): Updating session with ID {session_id} to status {status}")
@@ -169,7 +169,7 @@ def update_checkout_session(
 
         logger.debug(f"update_checkout_session(): Updated data: {response.data}")
         
-        return response.data if response.data else None
+        return response.data[0]
         
     except Exception as e:
         logger.error(f"update_checkout_session(): Failed to update checkout session: {str(e)}")
@@ -754,4 +754,17 @@ def get_products_by_stripe_product_ids(stripe_product_ids: list[str]) -> Optiona
         return response.data if response.data else None
     except Exception as e:
         logger.error(f"get_products_by_stripe_product_ids(): Error fetching products with Stripe IDs {stripe_product_ids}: {str(e)}")
+        raise
+
+def get_product_by_stripe_price_id(stripe_price_id: str) -> dict:
+    """
+    Retrieve product details by Stripe product ID
+    """
+    try:
+        response = supabase.table('product').select('*').eq('stripe_price_id', stripe_price_id).execute()
+        logger.debug(f"get_product_by_stripe_price_id(): Retrieved product for Stripe Price ID {stripe_price_id}: {response.data}")
+
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"get_products_by_stripe_price_ids(): Error fetching products with Stripe Price IDs {stripe_price_ids}: {str(e)}")
         raise
