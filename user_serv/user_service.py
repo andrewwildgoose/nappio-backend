@@ -263,7 +263,7 @@ def assign_subscription_address(
         logger.error(f"Error assigning address to subscription: {str(e)}")
         raise
 
-def meeting_confirmation_process(supabase: Client, subscription_id: str, meeting_date: datetime):
+def meeting_confirmation_process(subscription_id: str, meeting_date: datetime):
     """
     Placeholder for meeting confirmation email process
     """
@@ -276,7 +276,7 @@ def meeting_confirmation_process(supabase: Client, subscription_id: str, meeting
         checkout_trigger_link = f"{FRONTEND_URL}/checkout?subscription_id={subscription_id}"
 
         # get user email & name from user id if needed
-        user_info = io_db.get_user_by_subscription_id(supabase, subscription_id)
+        user_info = io_db.get_user_by_subscription_id(subscription_id)
 
         meeting_date_str = meeting_date.strftime("%A, %B %d, %Y at %I:%M %p")
 

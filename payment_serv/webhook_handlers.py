@@ -37,6 +37,8 @@ async def webhook_router(event: WebhookEvent) -> None:
                 await handle_subscription_updated(event)
             case "customer.subscription.deleted":
                 await handle_subscription_updated(event)
+            case "payment_intent.payment_failed":
+                logger.warning(f"Payment failed: {event.data}")
             case _:
                 logger.warning(f"Unhandled event type: {event.type}")
     except Exception as e:

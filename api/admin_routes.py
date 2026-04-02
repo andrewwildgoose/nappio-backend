@@ -58,7 +58,7 @@ async def admin_update_subscription_progress(update: SubscriptionProgressUpdate)
 
         #TODO:Add address in to both emails for meeting confirmation
         # send email to customer confirming meeting date & with link to trigger checkout building
-        meeting_confirmation_process(supabase, update.subscription_id, update.meeting_date)
+        meeting_confirmation_process(update.subscription_id, update.meeting_date)
 
         return {"message": "Subscription progress updated"}
     except Exception as e:
@@ -71,7 +71,7 @@ async def admin_subscription_progress() -> List[SubscriptionDashboardResponse]:
     Get subscription progress for all users
     """
     try:
-        subscription_dashboard_data = io_db.get_all_subscription_progress(supabase, auth_supabase)
+        subscription_dashboard_data = io_db.get_all_subscription_progress(auth_supabase)
         return subscription_dashboard_data
     except Exception as e:
         logger.error(f"admin_subscription_progress(): Error getting subscription progress: {str(e)}")
