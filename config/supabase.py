@@ -1,8 +1,11 @@
 import os
+from dotenv import load_dotenv
 from supabase import create_client, Client
 from supabase.lib.client_options import ClientOptions
 import logging
 
+# Load environment variables from .env file
+load_dotenv()
 
 # Set up logging
 logger = logging.getLogger('uvicorn.error')
@@ -27,6 +30,7 @@ class SupabaseConfig:
 
 
                 if not cls._supabase_url or not cls._supabase_key:
+                    logger.debug(f"SUPABASE_URL: {cls._supabase_url}  or SUPABASE_KEY: {cls._supabase_key} not set in environment variables")
                     raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
 
                 # Create the client

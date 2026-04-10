@@ -1,5 +1,6 @@
 # Util imports
 import os
+from uuid import UUID
 from dotenv import load_dotenv
 import logging
 from datetime import datetime
@@ -16,11 +17,27 @@ import stripe
 # Custom imports
 import ios.io_db as io_db
 import product_serv.subscription_builder as sub_builder
-from email_serv.email_processor import send_confirmation_email
-from payment_serv.payment_processor import CheckoutSessionRequest, CheckoutSessionResponse, CreateSubscriptionRequest, PaymentDetailsRequest, PaymentDetailsResponse
+from email_serv.email_processor import send_confirmation_email, send_newsletter_signup_to_team
 import payment_serv.payment_processor as pa
 from payment_serv.webhook_handlers import WebhookEvent, webhook_router
 import user_serv.user_service as user_service
+import admin_serv.subscriptions as subscriptions_admin
+from models.user_models import (
+    SubscriptionDetailsResponse,
+    AddUserAddressRequest,
+    AddUserAddressResponse,
+    DeleteAddressResponse,
+    AssignSubscriptionAddressRequest,
+    SubscriptionRequest
+)
+from models.payment_models import (
+    CheckoutSessionResponse,
+    CreateSubscriptionRequest,
+    PaymentDetailsRequest,
+    PaymentDetailsResponse,
+    PauseSubscriptionRequest,
+    PauseSubscriptionResponse
+)
 
 # Get Supabase client from config
 from config.supabase import get_supabase
@@ -62,6 +79,7 @@ from api.admin_routes import router as admin_router
 
 # Frontend URL
 FRONTEND_URL = os.environ.get('FRONTEND_URL')
+ADMIN_DASHBOARD_URL = os.environ.get('ADMIN_DASHBOARD_URL')
 
 # Configure CORS
 origins = [
@@ -69,8 +87,8 @@ origins = [
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:5173",    
-    # inject frontend URL from environment variable
     FRONTEND_URL,
+    ADMIN_DASHBOARD_URL,
 ]
 
 app.add_middleware(
@@ -109,7 +127,7 @@ def subscribe_to_newsletter(subscriber: io_db.NewsletterSubscriber):
         logger.debug(f'Received subscriber data: {subscriber.model_dump()}')
         
         # Insert subscriber into the database
-        result = io_db.insert_newsletter_subscriber(supabase, subscriber)
+        result = io_db.insert_newsletter_subscriber(subscriber)
         if not result:
             logger.error("subscribe_to_newsletter(): Failed to subscribe")
             raise HTTPException(status_code=400, detail="Failed to subscribe")
@@ -129,6 +147,15 @@ def subscribe_to_newsletter(subscriber: io_db.NewsletterSubscriber):
         if email_response.get("status") != 200:
             logger.warning(f"subscribe_to_newsletter(): Failed to send confirmation email to {subscriber.email}")
         
+        team_response = send_newsletter_signup_to_team(
+            subscriber_email=subscriber.email,
+            subscriber_name=subscriber.first_name,
+            subscriber_postcode=subscriber.postcode if hasattr(subscriber, 'postcode') else None
+        )
+
+        if team_response.get("status") != 200:
+            logger.warning("subscribe_to_newsletter(): Failed to send signup notification to team")
+        
         return result
     except Exception as e:
         if "duplicate key" in str(e).lower():
@@ -145,7 +172,7 @@ def verify_subscriber_email(request: io_db.EmailVerificationRequest):
     try:
         email = request.email
         logger.debug(f"Received email verification request for: {email}")
-        verified = io_db.verify_newsletter_subscriber(supabase, request)
+        verified = io_db.verify_newsletter_subscriber(request)
         if verified:
             return {"message": f"Email {email} verified successfully."}
         else:
@@ -190,14 +217,14 @@ async def get_authenticated_user(request: Request):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 # User routes
-@user_router.get("/user-subscriptions", response_model=list[user_service.SubscriptionDetailsResponse])
+@user_router.get("/user-subscriptions", response_model=list[SubscriptionDetailsResponse])
 async def get_user_subscriptions(user = Depends(get_authenticated_user)):
     """
     Get a list of subscriptions for the authenticated user
     """
     try:
         #logger.debug(f"get_user_subscriptions(): Authenticated user: {user}")
-        subscriptions = user_service.get_user_subscriptions(supabase, user.id)
+        subscriptions = user_service.get_user_subscriptions(user.id)
         ##logger.debug(f"get_user_subscriptions(): Found subscriptions: {subscriptions}")
         return subscriptions
     except Exception as e:
@@ -216,7 +243,7 @@ async def get_user_addresses(user = Depends(get_authenticated_user)):
     """
     try:
         #logger.debug(f"get_user_addresses(): Authenticated user: {user}")
-        addresses = user_service.get_user_addresses(supabase, user.id)
+        addresses = user_service.get_user_addresses(user.id)
         
         if not addresses:
             logger.info(f"get_user_addresses(): No addresses found for user {user.id}")
@@ -229,9 +256,9 @@ async def get_user_addresses(user = Depends(get_authenticated_user)):
         logger.error(f"Error getting user addresses: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@user_router.post("/add-address", response_model=user_service.AddUserAddressResponse)
+@user_router.post("/add-address", response_model=AddUserAddressResponse)
 async def add_user_address(
-    request: user_service.AddUserAddressRequest,
+    request: AddUserAddressRequest,
     user = Depends(get_authenticated_user)
 ):
     """
@@ -244,14 +271,14 @@ async def add_user_address(
     """
     try:
         logger.debug(f"add_user_address(): Received request: {request.model_dump()}")
-        address = user_service.add_user_address(supabase, request, user.id)
+        address = user_service.add_user_address(request, user.id)
         logger.debug(f"add_user_address(): Created address: {address}")
         return address
     except Exception as e:
         logger.error(f"Error adding user address: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@user_router.delete("/delete-address/{address_id}", response_model=user_service.DeleteAddressResponse)
+@user_router.delete("/delete-address/{address_id}", response_model=DeleteAddressResponse)
 async def delete_user_address(
     address_id: str,
     user = Depends(get_authenticated_user)
@@ -266,7 +293,7 @@ async def delete_user_address(
     """
     try:
         logger.debug(f"delete_user_address(): Attempting to delete address {address_id} for user {user.id}")
-        success = user_service.delete_user_address(supabase, address_id, user.id)
+        success = user_service.delete_user_address(UUID(address_id), user.id)
         
         if success:
             return {"message": "Address deleted successfully"}
@@ -279,7 +306,7 @@ async def delete_user_address(
 
 @user_router.post("/assign-subscription-address", response_model=dict)
 async def assign_subscription_address(
-    request: user_service.AssignSubscriptionAddressRequest,
+    request: AssignSubscriptionAddressRequest,
     user = Depends(get_authenticated_user)
 ):
     try:
@@ -311,49 +338,7 @@ async def assign_subscription_address(
         logger.error(f"Error assigning address to subscription: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Stripe checkout session creation
-@payment_router.post("/create-checkout", response_model=CheckoutSessionResponse)
-async def create_checkout_session(
-    request: CheckoutSessionRequest,
-    user = Depends(get_authenticated_user)
-):
-    """
-    Create a Stripe checkout session for subscription purchase
-
-    Args:
-        request: Checkout session request containing price ID
-        user: Authenticated user object from Supabase (injected by dependency)
-
-    Returns:
-        CheckoutSessionResponse: Contains checkout URL for redirect
-    
-    Raises:
-        HTTPException: 
-            - 400 if Stripe encounters an error
-            - 500 if server encounters an error
-    """
-    try:
-        logger.debug(f"create_checkout_session(): Received request: {request.model_dump()}")
-        # Create checkout session using authenticated user
-        result = pa.create_stripe_checkout_session(
-            supabase=supabase,
-            request=request,
-            user=user,
-            frontend_url=FRONTEND_URL,
-        )
-
-        logger.debug(f"create_checkout_session(): Created session: {result}")
-        
-        return result
-        
-    except stripe.error.StripeError as e:
-        logger.error(f"Stripe error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error creating checkout session: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-    
-# MARKED FOR DEPRECATION
+# Payment routes
 @payment_router.post("/start-subscription", response_model=CheckoutSessionResponse)
 async def start_subscription(
     request: CreateSubscriptionRequest,
@@ -365,32 +350,44 @@ async def start_subscription(
     try:
         logger.debug(f"start_subscription(): Received request: {request.model_dump()}")
 
+        if request.addressId:
+            logger.debug(f"start_subscription(): Using existing address ID: {request.addressId}")
+            address_id = request.addressId
+        else:
+            logger.debug("start_subscription(): No existing address ID provided, creating new address")
 
+            # Build insert the address for the subscription
+            address_obj = AddUserAddressRequest(
+                address_line_1=request.address["address_line_1"],
+                address_line_2=request.address.get("address_line_2"),
+                city=request.address["city"],
+                postcode=request.address["postcode"],
+                country=request.address["country"],
+                address_notes=request.address.get("address_notes")
+            )
+            addressResponse = user_service.add_user_address(address_obj, user.id)
 
-        # Build insert the address for the subscription
-        address_obj = user_service.AddUserAddressRequest(
-            address_line_1=request.address["address_line_1"],
-            address_line_2=request.address.get("address_line_2"),
-            city=request.address["city"],
-            postcode=request.address["postcode"],
-            country=request.address["country"],
-            address_notes=request.address.get("address_notes")
-        )
-        addressResponse = user_service.add_user_address(supabase, address_obj, user.id)
-
-        address_id = str(addressResponse.address.id)
+            address_id = str(addressResponse.address.id)
 
         # Add subscription to user_subscription table -> get subscription_id
-        subscription = io_db.insert_user_subscription(supabase, status="pending", user_id=user.id, address_id=address_id, baby_dob=datetime.fromisoformat(request.babyBirthdate), baby_weight_at_start=request.babyWeight)
+        subscription = io_db.insert_user_subscription(
+            status="pending", user_id=user.id, 
+            address_id=address_id, 
+            baby_dob=datetime.fromisoformat(request.babyBirthdate), 
+            baby_weight_at_start=request.babyWeight
+            )
         logger.debug(f"start_subscription(): Created subscription record: {subscription}")
 
         # Add subscription to subscription_progress table
-        subscription_progress = io_db.insert_subscription_progress(supabase, subscription_id=subscription['id'], status=subscription['status'])
+        subscription_progress = io_db.insert_subscription_progress(
+            subscription_id=subscription['id'], 
+            status=subscription['status']
+            )
         logger.debug(f"start_subscription(): Created subscription progress record: {subscription_progress}")
 
         # Add products to subscription_items table
-        subscription_items = sub_builder.build_subscription_items(supabase, subscription['id'], request)
-        items_added = io_db.insert_subscription_items(supabase, subscription_items=subscription_items)
+        subscription_items = sub_builder.build_subscription_items(subscription['id'], request)
+        items_added = io_db.insert_subscription_items(subscription_items=subscription_items)
         logger.debug(f"start_subscription(): Added {items_added} subscription items")
 
 
@@ -401,14 +398,14 @@ async def start_subscription(
             "address_id": address_id,
             "baby_dob": request.babyBirthdate,
             "baby_weight": request.babyWeight,
+            "checkout_type": "start_up"
         }
 
         # Build startup line items for stripe checkout
-        startup_line_items = sub_builder.build_stripe_startup_cost_items(supabase)
+        startup_line_items = sub_builder.build_stripe_startup_cost_items()
         logger.debug(f"start_subscription(): Built startup line items: {startup_line_items}")
 
         checkout_session = pa.create_stripe_checkout_session(
-            supabase=supabase,
             line_items=startup_line_items,
             user=user,
             frontend_url=FRONTEND_URL,
@@ -417,19 +414,108 @@ async def start_subscription(
         )
         logger.debug(f"start_subscription(): Created checkout session: {checkout_session}")
 
-        #TODO: move to 'create_subscription_checkout(subscription_id: str)' route
-        # result = pa.create_stripe_subscription_checkout_session(
-        #     supabase=supabase,
-        #     line_items=subscription_items,
-        #     user=user,
-        #     frontend_url=FRONTEND_URL,
-        #     cancel_url=request.cancelUrl,
-        #     metadata=metadata
-        # )
-
         return checkout_session
     except Exception as e:
         logger.error(f"start_subscription(): Error starting subscription: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@payment_router.post("/pause-subscription", response_model=PauseSubscriptionResponse)
+async def pause_subscription(
+    request: PauseSubscriptionRequest,
+    user = Depends(get_authenticated_user)
+):
+    """
+    Docstring for pause_subscription
+    
+    :param request: Request object to pause a subscription
+    :type request: PauseSubscriptionRequest
+    :param user: User requesting the pause
+    """
+    try:
+        logger.debug(f"pause_subscription(): Received request: {request.model_dump()}")
+
+        # Validate that the subscription belongs to the user
+        subscription = user_service.get_subscription(request.subscription_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        if subscription.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to pause this subscription")
+
+        # Convert pause_until string to datetime if it's provided
+        pause_until_datetime = None
+        if request.pause_until:
+            pause_until_datetime = datetime.fromisoformat(request.pause_until)
+        
+        # Pause the subscription
+        pa.pause_subscription(
+            subscription_id=request.subscription_id,
+            stripe_subscription_id=subscription.stripe_subscription_id,
+            pause_until=pause_until_datetime
+        )
+        logger.debug(f"pause_subscription(): Paused subscription {request.subscription_id} until {request.pause_until}")
+
+        return PauseSubscriptionResponse(message="Subscription paused successfully")
+
+
+    except Exception as e:
+        logger.error(f"pause_subscription(): Error pausing subscription: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@payment_router.post("/create-checkout-from-subscription", response_model=CheckoutSessionResponse)
+async def create_subscription_checkout(
+    request: SubscriptionRequest,
+    user = Depends(get_authenticated_user)
+):
+    """
+    Create a Stripe checkout session for an existing subscription.
+    """
+    try:
+        logger.debug(f"create_subscription_checkout(): Received request: {request.model_dump()}")
+
+        # Validate that the subscription belongs to the user and is in a state that allows checkout
+        subscription = user_service.get_subscription(request.id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+
+        # Fetch the subscription items to build line items for Stripe
+        subscription_items = user_service.get_subscription_items(subscription.id)
+        if not subscription_items:
+            raise HTTPException(status_code=400, detail="No items found for this subscription")
+
+        product_ids = [item['product_id'] for item in subscription_items]
+        
+        line_items = sub_builder.build_stripe_subscription_items(product_ids)
+        logger.debug(f"create_subscription_checkout(): Built line items: {line_items}")
+
+        # Combine standard metadata with any custom metadata from the request
+        metadata = {
+            "subscription_id": request.id,
+            "checkout_type": "subscription"
+        }
+
+        #TODO: Need to factor in the subscription start date.
+        subscription_start_date = subscriptions_admin.get_meeting_date(request.id)
+        logger.debug(f'Type of subscription_start_date: {type(subscription_start_date)}')
+        if not subscription_start_date:
+            raise HTTPException(status_code=400, detail="Meeting date not found")
+
+        checkout_session = pa.create_stripe_subscription_checkout_session(
+            line_items=line_items,
+            user=user,
+            frontend_url=FRONTEND_URL,
+            cancel_url=request.cancelUrl,
+            billing_anchor=subscription_start_date,
+            metadata=metadata
+        )
+        logger.debug(f"create_subscription_checkout(): Created checkout session: {checkout_session}")
+
+        return checkout_session
+
+    except HTTPException as he:
+        raise he  # Re-raise HTTP exceptions to be handled by FastAPI
+    except Exception as e:
+        logger.error(f"create_subscription_checkout(): Error creating checkout session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @payment_router.post("/payment-completed-details", response_model=PaymentDetailsResponse)
@@ -473,11 +559,11 @@ async def stripe_webhook(request: Request):
 
 
         # Route the event to the appropriate handler
-        await webhook_router(webhook_event, supabase)
+        await webhook_router(webhook_event)
             
         return {"status": "success"}
         
-    except stripe.error.SignatureVerificationError as e:
+    except stripe.SignatureVerificationError as e:
         logger.error(f"Invalid webhook signature: {str(e)}")
         raise HTTPException(status_code=400, detail="Invalid signature")
     except Exception as e:

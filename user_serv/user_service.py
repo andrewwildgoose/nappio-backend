@@ -4,67 +4,64 @@ import stripe
 from datetime import datetime
 from typing import Optional, List
 
-from pydantic import BaseModel
 from supabase import Client
 from uuid import UUID
 
 import ios.io_db as io_db
 import email_serv.email_processor as email_processor
+from models.user_models import (
+    ProductDetails,
+    SubscriptionDetailsResponse,
+    AddUserAddressRequest,
+    AddUserAddressResponse,
+    DeleteAddressResponse,
+)
+
+# Get Supabase client from config
+from config.supabase import get_supabase
 
 logger = logging.getLogger('uvicorn.error')
 
-class ProductDetails(BaseModel):
-    name: str
-    price: float
-    currency: str
+# Initialize Supabase client
+supabase = get_supabase()
 
-class SubscriptionDetailsResponse(BaseModel):
-    id: Optional[UUID]
-    status: str
-    start_date: datetime
-    end_date: Optional[datetime] = None
-    subscription_id: str
-    next_payment_date: Optional[datetime] = None
-    address_id: Optional[UUID] = None  # Optional field for address ID if applicable
-    items: List[ProductDetails] = []  # List of products in the subscription
+def get_subscription(subscription_id: str) -> Optional[SubscriptionDetailsResponse]:
+    """
+    Get a subscription by its ID from the database
 
-class UserAddressRequest(BaseModel):
-    id: Optional[UUID] = None  # Optional UUID for existing address
-    user_id: str
-    address_line_1: str
-    address_line_2: Optional[str] = None
-    city: str
-    postcode: str
-    country: str
-    address_notes: Optional[str] = None
+    Args:
+        subscription_id: The ID of the subscription to retrieve
 
-class AddUserAddressRequest(BaseModel):
-    address_line_1: str
-    address_line_2: Optional[str] = None
-    city: str
-    postcode: str
-    country: str
-    address_notes: Optional[str] = None
-
-class AddUserAddressResponse(BaseModel):
-    success: bool
-    message: str
-    address: Optional[io_db.UserAddress] = None  # The newly created address object if successful
-
-class DeleteAddressRequest(BaseModel):
-    address_id: UUID  # UUID of the address to delete
-
-class DeleteAddressResponse(BaseModel):
-    success: bool
-    message: str
-
-class AssignSubscriptionAddressRequest(BaseModel):
-    address_id: str
-    subscription_id: str
-
+    Returns:
+        SubscriptionDetailsResponse if found, else None
+    """
+    try:
+        response = io_db.get_subscription_by_id(subscription_id)
+        if response is not None:
+            logger.debug(f"get_subscription(): Retrieved subscription {subscription_id}: {response}")
+            # Map the database response to SubscriptionDetailsResponse
+            subscription = SubscriptionDetailsResponse(
+                id=response['id'],
+                user_id=response['user_id'],
+                customer_id=response.get('customer_id'),
+                status=response['status'],
+                start_date=response['subscribed_at'],
+                end_date=response.get('cancelled_at'),
+                stripe_subscription_id=response['stripe_subscription_id'],
+                next_payment_date=response.get('next_payment_date'),
+                address_id=response.get('address_id'),
+                items=[]  # Items can be fetched separately if needed
+            )
+            return subscription
+        else:
+            logger.debug(f"get_subscription(): No subscription found with ID {subscription_id}")
+            return None
+    except Exception as e:
+        logger.error(f"get_subscription(): Error fetching subscription {subscription_id}: {str(e)}")
+        raise
 
 #TODO: There is a similar function in io_db.py, consider refactoring to avoid duplication
-def get_user_subscriptions(supabase: Client, user_id: str) -> List[SubscriptionDetailsResponse]:
+def get_user_subscriptions(user_id: str) -> List[SubscriptionDetailsResponse]:
     """
     Get a user's subscription details from the database and Stripe
 
@@ -115,7 +112,7 @@ def get_user_subscriptions(supabase: Client, user_id: str) -> List[SubscriptionD
                     start_date=sub['subscribed_at'],
                     next_payment_date=sub['next_payment_date'],
                     end_date=sub['cancelled_at'],
-                    subscription_id=sub['stripe_subscription_id'],
+                    stripe_subscription_id=sub['stripe_subscription_id'],
                     address_id=sub['address_id'] if 'address_id' in sub else None,
                     items=product_items
                 )
@@ -131,7 +128,26 @@ def get_user_subscriptions(supabase: Client, user_id: str) -> List[SubscriptionD
         logger.error(f"get_user_subscriptions(): Error fetching subscriptions for user {user_id}: {str(e)}")
         raise
 
-def get_user_addresses(supabase: Client, user_id: str) -> List[io_db.UserAddress]:
+#TODO: Refactor to use product object
+def get_subscription_items(subscription_id: UUID) -> List[dict]:
+    """
+    Get all items for a subscription from the database
+
+    Args:
+        subscription_id: The ID of the subscription to retrieve items for
+    Returns:
+        List[SubscriptionItem]: List of subscription items (empty list if none found)
+    """
+    try:
+        subscription_id_str = str(subscription_id)  # Ensure it's a string
+        items = io_db.get_subscription_items(subscription_id_str)
+        logger.debug(f"get_subscription_items(): Retrieved {len(items)} items for subscription {subscription_id}")
+        return items
+    except Exception as e:
+        logger.error(f"get_subscription_items(): Error fetching items for subscription {subscription_id}: {str(e)}")
+        raise
+
+def get_user_addresses(user_id: str) -> List[io_db.UserAddress]:
     """
     Get all addresses for a user from the database
     
@@ -155,12 +171,11 @@ def get_user_addresses(supabase: Client, user_id: str) -> List[io_db.UserAddress
         logger.error(f"get_user_addresses(): Error fetching addresses for user {user_id}: {str(e)}")
         raise
 
-def add_user_address(supabase: Client, address_request: AddUserAddressRequest, user_id: str) -> AddUserAddressResponse:
+def add_user_address(address_request: AddUserAddressRequest, user_id: str) -> AddUserAddressResponse:
     """
     Add a new address for a user to the database
 
     Args:
-        supabase: Supabase client instance
         address_request: UserAddressRequest containing address details
 
     Returns:
@@ -174,7 +189,7 @@ def add_user_address(supabase: Client, address_request: AddUserAddressRequest, u
 
         try:
             new_address = io_db.UserAddress(**address_data)
-            response = io_db.insert_user_address(supabase, new_address)
+            response = io_db.insert_user_address(new_address)
             logger.debug(f"add_user_address(): Inserted address data: {response}")
             address_response = AddUserAddressResponse(
                 success=True,
@@ -191,12 +206,12 @@ def add_user_address(supabase: Client, address_request: AddUserAddressRequest, u
         logger.error(f"add_user_address(): Error adding address for user {user_id}: {str(e)}")
         raise
 
-def delete_user_address(supabase: Client, address_id: UUID, user_id: UUID) -> DeleteAddressResponse:
+#TODO: Refactor to use io_db function
+def delete_user_address(address_id: UUID, user_id: UUID) -> DeleteAddressResponse:
     """
     Delete a user's address from the database
 
     Args:
-        supabase: Supabase client instance
         address_id: UUID of the address to delete
         user_id: UUID of the user requesting the deletion
 
@@ -205,7 +220,7 @@ def delete_user_address(supabase: Client, address_id: UUID, user_id: UUID) -> De
     """
     try:
         response = supabase.table('user_addresses').delete().eq('id', str(address_id)).eq('user_id', str(user_id)).execute()
-        if response.status_code == 204:
+        if response.status_code == 200:
             logger.debug(f"delete_user_address(): Successfully deleted address {address_id}")
             return DeleteAddressResponse(success=True, message="Address deleted successfully.")
         else:
@@ -248,7 +263,7 @@ def assign_subscription_address(
         logger.error(f"Error assigning address to subscription: {str(e)}")
         raise
 
-def meeting_confirmation_process(supabase: Client, subscription_id: str, meeting_date: datetime):
+def meeting_confirmation_process(subscription_id: str, meeting_date: datetime):
     """
     Placeholder for meeting confirmation email process
     """
@@ -261,14 +276,35 @@ def meeting_confirmation_process(supabase: Client, subscription_id: str, meeting
         checkout_trigger_link = f"{FRONTEND_URL}/checkout?subscription_id={subscription_id}"
 
         # get user email & name from user id if needed
-        user_info = io_db.get_user_by_subscription_id(supabase, subscription_id)
+        user_info = io_db.get_user_by_subscription_id(subscription_id)
+
+        meeting_date_str = meeting_date.strftime("%A, %B %d, %Y at %I:%M %p")
+
+        subscription_address_res = io_db.get_subscription_address(subscription_id)
+
+        logger.debug(f"meeting_confirmation_process(): Retrieved subscription address: {subscription_address_res}")
+
         if user_info:
+            logger.debug(f"meeting_confirmation_process(): Retrieved user info: {user_info}")
             user_email = user_info.get("email")
-            user_name = user_info.get("user_metadata", {}).get("name")
+            user_name = user_info.get("user_metadata", {}).get("first_name")
 
             logger.info(f"meeting_confirmation_process(): Retrieved user info for subscription {subscription_id}: email={user_email}, name={user_name}")
             if user_email and user_name:
-                email_processor.send_meeting_confirm_and_sub_checkout_email(user_email, user_name, meeting_date, checkout_trigger_link)
+                email_processor.send_meeting_confirm_and_sub_checkout_email(
+                    user_email, 
+                    user_name, 
+                    meeting_date_str, 
+                    checkout_trigger_link,
+                    subscription_address_res
+                )
+                email_processor.send_meeting_confirm_to_team(meeting_date_str, user_name, user_email, subscription_address_res)
+                io_db.update_subscription_progress_admin(
+                    subscription_id=subscription_id,
+                    status="checkout_sent"
+                )
+            else:
+                raise ValueError(f"meeting_confirmation_process(): Incomplete user info for subscription {subscription_id}: email={user_email}, name={user_name}")
         else:
             raise ValueError(f"meeting_confirmation_process(): No user found for subscription {subscription_id}")
 

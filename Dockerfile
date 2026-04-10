@@ -13,19 +13,21 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir -p api ios email_serv
 
 # Copy files maintaining project structure
+COPY admin_serv/subscriptions.py admin_serv/
 COPY api/main.py api/
 COPY api/admin_routes.py api/
-COPY ios/io_db.py ios/
+COPY config/supabase.py config/
 COPY email_serv/email_processor.py email_serv/
-COPY payment_serv/webhook_handlers.py payment_serv/
-COPY payment_serv/payment_processor.py payment_serv/
-COPY user_serv/user_service.py user_serv/
+COPY email_serv/email_utils.py email_serv/
+COPY ios/io_db.py ios/
 COPY models/admin_models.py models/
 COPY models/payment_models.py models/
-COPY config/supabase.py config/
+COPY models/user_models.py models/
+COPY payment_serv/webhook_handlers.py payment_serv/
+COPY payment_serv/payment_processor.py payment_serv/
 COPY product_serv/stripe_product_sync.py product_serv/
 COPY product_serv/subscription_builder.py product_serv/
-
+COPY user_serv/user_service.py user_serv/
 
 # Set environment variables
 ENV PYTHONPATH=/app

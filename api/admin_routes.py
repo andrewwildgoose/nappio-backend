@@ -1,14 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from typing import List
 import logging
 
 # Get Supabase client from config
 from config.supabase import get_supabase, get_supabase_service_role
-from supabase import Client
 
 from ios import io_db
 from models.admin_models import SubscriptionDashboardResponse, SubscriptionProgressUpdate
-from email_serv.email_processor import send_order_email_to_team
 from user_serv.user_service import meeting_confirmation_process
 
 # Set up logging
@@ -43,10 +41,16 @@ async def admin_update_subscription_progress(update: SubscriptionProgressUpdate)
     Update subscription progress (status and/or meeting_date) for a subscription
     """
     try:
+        if not update.status and not update.meeting_date:
+            raise HTTPException(status_code=400, detail="Both status and meeting_date must be provided")
+        
+        #TODO: build more robust status validation
+        if update.status not in ['meeting_scheduled']:
+            raise HTTPException(status_code=400, detail="Invalid status value, please ensure the status is set to 'Meeting Scheduled'")
         logger.info(f"admin_update_subscription_progress(): Updating subscription {update.subscription_id} with status {update.status} and meeting_date {update.meeting_date}")
+        
         # Call a function in io_db to perform the update
         io_db.update_subscription_progress_admin(
-            supabase,
             update.subscription_id,
             status=update.status,
             meeting_date=update.meeting_date
@@ -54,10 +58,7 @@ async def admin_update_subscription_progress(update: SubscriptionProgressUpdate)
 
         #TODO:Add address in to both emails for meeting confirmation
         # send email to customer confirming meeting date & with link to trigger checkout building
-        meeting_confirmation_process(supabase, update.subscription_id, update.meeting_date)
-
-        # email team to confirm meeting date
-
+        meeting_confirmation_process(update.subscription_id, update.meeting_date)
 
         return {"message": "Subscription progress updated"}
     except Exception as e:
@@ -70,7 +71,7 @@ async def admin_subscription_progress() -> List[SubscriptionDashboardResponse]:
     Get subscription progress for all users
     """
     try:
-        subscription_dashboard_data = io_db.get_subscription_progress(supabase, auth_supabase)
+        subscription_dashboard_data = io_db.get_all_subscription_progress(auth_supabase)
         return subscription_dashboard_data
     except Exception as e:
         logger.error(f"admin_subscription_progress(): Error getting subscription progress: {str(e)}")
