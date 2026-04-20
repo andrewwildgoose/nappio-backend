@@ -1,32 +1,33 @@
 import logging
 import os
-import stripe
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
 from uuid import UUID
 
+import stripe
 from supabase import Client
 
-from models.user_models import (
-    UserAddress,
-    ProductDetails,
-    SubscriptionDetailsResponse,
-    AddUserAddressRequest,
-    AddUserAddressResponse,
-    DeleteAddressResponse,
-)
-from repositories.subscription_repository import (
-    get_subscription_by_id,
-    get_subscription_items as repo_get_subscription_items,
-    get_subscription_address,
-    update_subscription_progress_admin,
-)
-from repositories.user_repository import (
-    insert_user_address,
-    get_user_by_subscription_id,
-)
 import email_serv.email_processor as email_processor
 from config.supabase import get_supabase
+from models.user_models import (
+    AddUserAddressRequest,
+    AddUserAddressResponse,
+    ProductDetails,
+    SubscriptionDetailsResponse,
+    UserAddress,
+)
+from repositories.subscription_repository import (
+    get_subscription_address,
+    get_subscription_by_id,
+    update_subscription_progress_admin,
+)
+from repositories.subscription_repository import (
+    get_subscription_items as repo_get_subscription_items,
+)
+from repositories.user_repository import (
+    get_user_by_subscription_id,
+    insert_user_address,
+)
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -174,18 +175,21 @@ def add_user_address(address_request: AddUserAddressRequest, user_id: str) -> Ad
         raise
 
 
-def delete_user_address(address_id: UUID, user_id: UUID) -> DeleteAddressResponse:
+def delete_user_address(address_id: UUID, user_id: UUID) -> bool:
     """
     Delete a user's address from the database.
+
+    Returns True if a row was deleted, False if the address was not found or does not
+    belong to the given user.
     """
     try:
         response = supabase.table('user_addresses').delete().eq('id', str(address_id)).eq('user_id', str(user_id)).execute()
-        if response.status_code == 200:
+        deleted = response.data is not None and len(response.data) > 0
+        if deleted:
             logger.debug(f"delete_user_address(): Successfully deleted address {address_id}")
-            return DeleteAddressResponse(success=True, message="Address deleted successfully.")
         else:
-            logger.error(f"delete_user_address(): Failed to delete address {address_id}, status code: {response.status_code}")
-            return DeleteAddressResponse(success=False, message="Failed to delete address.")
+            logger.warning(f"delete_user_address(): No address found for id={address_id}, user_id={user_id}")
+        return deleted
 
     except Exception as e:
         logger.error(f"delete_user_address(): Error deleting address {address_id}: {str(e)}")

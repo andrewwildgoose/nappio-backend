@@ -36,7 +36,7 @@ async def admin_update_subscription_progress(update: SubscriptionProgressUpdate)
     """Update subscription progress (status and/or meeting_date) for a subscription."""
     try:
         if not update.status and not update.meeting_date:
-            raise HTTPException(status_code=400, detail="Both status and meeting_date must be provided")
+            raise HTTPException(status_code=400, detail="At least one of status or meeting_date must be provided")
 
         #TODO: build more robust status validation
         if update.status not in ['meeting_scheduled']:
