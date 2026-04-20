@@ -5,49 +5,40 @@ from typing import Optional
 import stripe
 from gotrue import User
 
-from email_serv import email_processor
-from ios import io_db
-from models.payment_models import (
-    CheckoutSessionResponse,
-    PaymentDetailsResponse
-)
-
-# Get Supabase client from config
 from config.supabase import get_supabase
+from email_serv import email_processor
+from models.payment_models import CheckoutSessionResponse, PaymentDetailsResponse
+from repositories.payment_repository import insert_checkout_session
+from repositories.product_repository import get_product_by_stripe_price_id
+from repositories.subscription_repository import (
+    get_subscription_address,
+    update_subscription_progress_admin,
+    update_user_subscription,
+)
+from repositories.user_repository import get_user_by_subscription_id
 
 logger = logging.getLogger('uvicorn.error')
 
-# Initialize Supabase client
 supabase = get_supabase()
+
 
 def get_or_create_customer(email: str) -> stripe.Customer:
     """
     Check if a customer exists in Stripe by email, and either:
     - Return the existing customer if found
     - Create a new customer if not found
-
-    Args:
-        email: Customer's email address
-
-    Returns:
-        Stripe Customer object
     """
-    # Search for customers with matching email
     customers = stripe.Customer.list(email=email, limit=1)
 
-    # If customer exists, return the first match
     if customers and len(customers.data) > 0:
         existing_customer = customers.data[0]
-        print(f"Found existing customer: {existing_customer.id}")
-
+        logger.debug(f"get_or_create_customer(): Found existing customer: {existing_customer.id}")
         return existing_customer
 
-    # No customer found, create a new one
-    new_customer = stripe.Customer.create(
-        email=email
-    )
-    print(f"Created new customer: {new_customer.id}")
+    new_customer = stripe.Customer.create(email=email)
+    logger.debug(f"get_or_create_customer(): Created new customer: {new_customer.id}")
     return new_customer
+
 
 def create_stripe_checkout_session(
         line_items: list[dict],
@@ -56,27 +47,12 @@ def create_stripe_checkout_session(
         cancel_url: str,
         metadata: Optional[dict] = None
     ) -> CheckoutSessionResponse:
-    """
-    Creates a Stripe one-off payment checkout session.
-
-    Args:
-        supabase: Supabase client instance
-        line_items: List of line items to include in the checkout session
-        user: Authenticated user object
-        frontend_url: URL of the frontend application
-        cancel_url: URL to redirect to if the user cancels the checkout
-        metadata: Optional metadata to include in the checkout session
-
-    Returns:
-        CheckoutSessionResponse containing the checkout URL, session ID and metadata
-    """
+    """Creates a Stripe one-off payment checkout session."""
     try:
         logger.info(f"create_stripe_checkout_session(): Creating checkout session for user {user.id} with line items {line_items}")
 
         stripe_customer = get_or_create_customer(email=user.email)
 
-
-        # Create Stripe checkout session
         session = stripe.checkout.Session.create(
             customer=stripe_customer.id,
             line_items=line_items,
@@ -89,10 +65,9 @@ def create_stripe_checkout_session(
             }
         )
 
-        logger.info(f"create_stripe_checkout_session_with_line_items(): Checkout session created with ID {session.id}")
+        logger.info(f"create_stripe_checkout_session(): Checkout session created with ID {session.id}")
 
-        # Store session in supabase
-        inserted_session = io_db.insert_checkout_session(
+        insert_checkout_session(
             session_id=session.id,
             user_id=user.id,
             customer_id=session.customer,
@@ -101,20 +76,20 @@ def create_stripe_checkout_session(
         )
 
         logger.info(f"create_stripe_checkout_session(): Checkout session stored in Supabase for user {user.id} with session ID {session.id}")
-        
-        # Return session URL and ID
+
         return {
             "checkout_url": session.url,
             "session_id": session.id,
             "metadata": metadata
         }
-        
+
     except stripe.error.StripeError as e:
-        logger.error(f"Stripe error creating checkout session: {str(e)}")
+        logger.error(f"create_stripe_checkout_session(): Stripe error: {str(e)}")
         raise
     except Exception as e:
-        logger.error(f"Error creating checkout session: {str(e)}")
+        logger.error(f"create_stripe_checkout_session(): Error: {str(e)}")
         raise
+
 
 def create_stripe_subscription_checkout_session(
         line_items: list[dict],
@@ -124,31 +99,24 @@ def create_stripe_subscription_checkout_session(
         billing_anchor: datetime,
         metadata: Optional[dict] = None
     ) -> CheckoutSessionResponse:
-
+    """Creates a Stripe subscription checkout session."""
     try:
-        logger.info(f"create_stripe_checkout_session_with_line_items(): Creating subscription checkout session for user {user.id} with line items {line_items}")
+        logger.info(f"create_stripe_subscription_checkout_session(): Creating subscription checkout session for user {user.id}")
 
         stripe_customer = get_or_create_customer(email=user.email)
 
-        logger.debug(f"Billing cycle anchor datetime: {billing_anchor}")
-        logger.debug(f"Billing cycle anchor timezone: {billing_anchor.tzinfo}")
-        logger.debug(f"Billing cycle anchor timestamp (float): {billing_anchor.timestamp()}")
-        logger.debug(f"Billing cycle anchor timestamp (int): {int(billing_anchor.timestamp())}") 
-        # Ensure billing_anchor is in UTC
+        logger.debug("create_stripe_subscription_checkout_session(): Resolving billing cycle anchor timezone")
+
         if billing_anchor.tzinfo is None:
-            # If timezone-naive, assume it's UTC
             billing_anchor = billing_anchor.replace(tzinfo=timezone.utc)
         else:
-            # Convert to UTC if it has a different timezone
             billing_anchor = billing_anchor.astimezone(timezone.utc)
-        
+
         subscription_start_timestamp: int = int(billing_anchor.timestamp())
-        logger.debug(f"UTC Billing cycle anchor timestamp: {subscription_start_timestamp}")
-        
-        # Check if billing_anchor is more than 2 days away
+
         current_time = datetime.now(timezone.utc)
         five_days_from_now = current_time + timedelta(days=5)
-        
+
         if billing_anchor > five_days_from_now:
             subscription_data = {
                 'trial_end': subscription_start_timestamp,
@@ -161,7 +129,6 @@ def create_stripe_subscription_checkout_session(
                 'metadata': metadata or {}
             }
 
-        # Create Stripe checkout session
         session = stripe.checkout.Session.create(
             customer=stripe_customer.id,
             line_items=line_items,
@@ -172,158 +139,126 @@ def create_stripe_subscription_checkout_session(
             metadata=metadata
         )
 
-        logger.info(f"create_stripe_checkout_session_with_line_items(): Checkout session created with ID {session.id}")
+        logger.info(f"create_stripe_subscription_checkout_session(): Checkout session created with ID {session.id}")
 
-        # Store session info in Supabase
-        io_db.insert_checkout_session(
+        insert_checkout_session(
             session_id=session.id,
             user_id=user.id,
             customer_id=session.customer,
             line_items=line_items,
         )
 
-        logger.info(f"create_stripe_checkout_session_with_line_items(): Checkout session stored in Supabase for user {user.id} with session ID {session.id}\nSession URL: {session.url}")
+        logger.info(f"create_stripe_subscription_checkout_session(): Checkout session stored in Supabase for user {user.id}")
 
-        # Return session URL and ID
         return CheckoutSessionResponse(
             checkout_url=session.url,
             session_id=session.id
         )
 
     except stripe.error.StripeError as e:
-        logger.error(f"Stripe error creating checkout session: {str(e)}")
+        logger.error(f"create_stripe_subscription_checkout_session(): Stripe error: {str(e)}")
         raise
     except Exception as e:
-        logger.error(f"Error creating checkout session: {str(e)}")
+        logger.error(f"create_stripe_subscription_checkout_session(): Error: {str(e)}")
         raise
 
+
 def get_payment_completed_details(session_id: str) -> PaymentDetailsResponse:
-    """
-    Fetch payment details from a completed checkout session
-
-    Args:
-        session_id: Stripe checkout session ID
-        
-    Returns:
-        PaymentDetailsResponse with items and customer details
-    """
+    """Fetch payment details from a completed checkout session."""
     try:
-        logger.info(f"get_payment_details(): Fetching payment details for session ID {session_id}")
+        logger.info(f"get_payment_completed_details(): Fetching payment details for session ID {session_id}")
 
-        # Retrieve the session and subscription details
         session = stripe.checkout.Session.retrieve(session_id)
 
-        logger.debug(f"Session details: {session}")
+        logger.info(f"get_payment_completed_details(): Session details fetched for session ID {session_id}")
 
-        # access      
-        logger.info(f"get_subscription_details(): Subscription details fetched for session ID {session_id}")
-        
         return PaymentDetailsResponse(
             amount_total=session['amount_total'],
             customer_email=session.customer_details.email,
             checkout_type=session.metadata.get('checkout_type', 'unknown')
         )
-        
+
     except Exception as e:
-        logger.error(f"Error fetching subscription details: {str(e)}")
+        logger.error(f"get_payment_completed_details(): Error: {str(e)}")
         raise
 
+
 def paid_processing(checkout_type: str, subscription_id: str, event_data: dict, line_items: list) -> None:
-    """
-    Placeholder function for processing after a payment is made.
-    This could include updating user status, sending confirmation emails, etc.
-    """
+    """Route payment processing based on checkout type."""
     try:
-        logger.info(f"Processing payment for checkout type: {checkout_type}")
+        logger.info(f"paid_processing(): Processing payment for checkout type: {checkout_type}")
         match checkout_type:
             case "start_up":
                 startup_costs_paid_processing(subscription_id, event_data, line_items)
             case "subscription":
                 subscription_paid_processing(subscription_id, event_data)
             case _:
-                logger.warning(f"Unknown checkout type: {checkout_type}")
-                raise ValueError(f"Unknown checkout type: {checkout_type}")           
+                logger.warning(f"paid_processing(): Unknown checkout type: {checkout_type}")
+                raise ValueError(f"Unknown checkout type: {checkout_type}")
     except Exception as e:
         logger.error(f"paid_processing(): Error processing payment for checkout type {checkout_type}: {str(e)}")
         raise
 
+
 def startup_costs_paid_processing(subscription_id: str, event_data: dict, line_items: list) -> None:
-    """
-    Placeholder function for processing after startup costs are paid.
-    This could include updating user status, sending confirmation emails, etc.
-    """
+    """Process startup costs payment: update subscription status and notify customer."""
     try:
-        logger.info("Processing startup costs payment")
-        # Update STATUS & CUSTOMER_ID in user_subscriptions table in supabase
-        subscription = io_db.update_user_subscription(
+        logger.info("startup_costs_paid_processing(): Processing startup costs payment")
+
+        update_user_subscription(
             subscription_id=subscription_id,
             customer_id=event_data['object']['customer'],
-            )
+        )
 
-        # Update subscription progress status to setup paid
-        io_db.update_subscription_progress_admin(
-            subscription_id=subscription_id, 
+        update_subscription_progress_admin(
+            subscription_id=subscription_id,
             status="setup_paid"
-            )
-        
-        # Send confirmation email to user
+        )
+
         subscription_items_response = supabase.table('subscription_items')\
             .select('*')\
             .eq('subscription_id', subscription_id)\
             .execute()
 
-        logger.debug(f"Subscription items: {subscription_items_response.data}")
-        
-        # Get product details for each subscription item
+        logger.debug(f"startup_costs_paid_processing(): Subscription items: {subscription_items_response.data}")
+
         product_details = []
         for item in subscription_items_response.data:
             product_response = supabase.table('product')\
                 .select('*')\
                 .eq('id', item['product_id'])\
                 .execute()
-                
+
             if product_response.data:
                 product = product_response.data[0]
                 product_details.append({
                     "subscription_id": subscription_id,
                     "item_name": product['name'],
-                    "cost": f'{product['currency'].upper()} {product['price'] / 100:.2f}',
+                    "cost": f'{product["currency"].upper()} {product["price"] / 100:.2f}',
                     "quantity": item['quantity'],
                     "type": product['type']
                 })
-        
-        # Get product details for item in the checkout
+
         for item in line_items:
-            product = io_db.get_product_by_stripe_price_id(item['price'])
+            product = get_product_by_stripe_price_id(item['price'])
             product_details.append({
                 "subscription_id": subscription_id,
                 "item_name": product['name'],
-                "cost": f'{product['currency'].upper()} {product['price'] / 100:.2f}',
+                "cost": f'{product["currency"].upper()} {product["price"] / 100:.2f}',
                 "quantity": item['quantity'],
                 "type": product['type']
             })
 
+        logger.debug(f"startup_costs_paid_processing(): Products in subscription: {product_details}")
 
-        logger.debug(f"Products in subscription: {product_details}")
-
-        # Get user from subscription record
-        user = io_db.get_user_by_subscription_id(subscription_id)
+        user = get_user_by_subscription_id(subscription_id)
         customer_name = user.get("user_metadata", {}).get("first_name")
         customer_email = user.get("email")
 
-        #TODO: Need to make these conditional on the right kind of checkout session
-        # ONLY FOR STARTUP COSTS
-        # send confirmation email to customer
         email_processor.send_new_subscription_email(customer_email, customer_name, product_details)
-        
-        # Send confirmation to team
-        team_email_subject = f"New Subscription: {customer_email}"
-        
-        # ONLY FOR STARTUP COSTS
 
-        # Get customer address
-        subscription_address_res = io_db.get_subscription_address(subscription_id)
-        # send confirmation email to team
+        team_email_subject = f"New Subscription: {customer_email}"
+        subscription_address_res = get_subscription_address(subscription_id)
         email_processor.send_order_email_to_team(
             subject=team_email_subject,
             customer_email=customer_email,
@@ -331,76 +266,67 @@ def startup_costs_paid_processing(subscription_id: str, event_data: dict, line_i
             customer_address=subscription_address_res,
             items=product_details
         )
-        # Send notification email to team
 
     except Exception as e:
-        logger.error(f"startup_costs_paid_processing(): Error processing startup costs payment: {str(e)}")
+        logger.error(f"startup_costs_paid_processing(): Error: {str(e)}")
         raise
 
-def subscription_paid_processing(subscription_id: str, event_data: dict):
-    """
-    Placeholder function for processing after a subscription payment is made.
-    This could include updating subscription status, sending confirmation emails, etc.
-    """
 
-    try:   
-        # Get user from subscription record
-        user = io_db.get_user_by_subscription_id(subscription_id)
+def subscription_paid_processing(subscription_id: str, event_data: dict):
+    """Process a subscription payment: update records and notify customer."""
+    try:
+        user = get_user_by_subscription_id(subscription_id)
         customer_name = user.get("user_metadata", {}).get("first_name")
         customer_email = user.get("email")
 
-        # Get subscription items
         subscription_items_response = supabase.table('subscription_items')\
             .select('*')\
             .eq('subscription_id', subscription_id)\
             .execute()
-        
-        logger.debug(f"Subscription items: {subscription_items_response.data}")
-        
-        # Get product details for each subscription item
+
+        logger.debug(f"subscription_paid_processing(): Subscription items: {subscription_items_response.data}")
+
         product_details = []
         for item in subscription_items_response.data:
             product_response = supabase.table('product')\
                 .select('*')\
                 .eq('id', item['product_id'])\
                 .execute()
-                
+
             if product_response.data:
                 product = product_response.data[0]
                 product_details.append({
                     "subscription_id": subscription_id,
                     "item_name": product['name'],
-                    "cost": f'{product['currency'].upper()} {product['price'] / 100:.2f}',
+                    "cost": f'{product["currency"].upper()} {product["price"] / 100:.2f}',
                     "quantity": item['quantity'],
                     "type": product['type']
                 })
-        
-        logger.debug(f"Products in subscription: {product_details}")
-        # Send confirmation email to user
+
+        logger.debug(f"subscription_paid_processing(): Products in subscription: {product_details}")
+
         email_processor.send_subscription_payment_active_email(
             to_email=customer_email,
             first_name=customer_name,
             subscription_items=product_details
         )
 
-        # Send notification email to team
-        logger.info("Sending notification email to team")
+        logger.info("subscription_paid_processing(): Sending notification email to team")
         email_processor.send_subscription_payment_active_to_team(
             customer_email=customer_email,
             customer_name=customer_name,
             items=product_details
         )
+
     except Exception as e:
-        logger.error(f"Error sending notification email to team: {str(e)}")
+        logger.error(f"subscription_paid_processing(): Error: {str(e)}")
         raise
 
+
 def pause_subscription(subscription_id: str, stripe_subscription_id: str, pause_until: Optional[datetime] = None) -> None:
-    """
-    Placeholder for pausing a subscription
-    """
+    """Pause a Stripe subscription."""
     try:
         logger.info(f"pause_subscription(): Pausing subscription {subscription_id}")
-        # Implement pausing logic here
         stripe.Subscription.modify(
             stripe_subscription_id,
             pause_collection={

@@ -1,6 +1,8 @@
-from pydantic import BaseModel, model_validator
 from datetime import datetime
 from typing import Optional
+
+from pydantic import BaseModel, model_validator
+
 
 class WebhookEvent(BaseModel):
     id: str
