@@ -1,17 +1,19 @@
 import logging
-import stripe
 from datetime import datetime
+
+import stripe
+
 from models.payment_models import WebhookEvent
-from product_serv import stripe_product_sync as sps
 from payment_serv import payment_processor as pp
+from product_serv import stripe_product_sync as sps
 from repositories.payment_repository import update_checkout_session
+from repositories.product_repository import get_products_by_stripe_product_ids
 from repositories.subscription_repository import (
-    update_user_subscription,
-    update_subscription_progress_admin,
     get_subscription_items,
     update_subscription_items,
+    update_subscription_progress_admin,
+    update_user_subscription,
 )
-from repositories.product_repository import get_products_by_stripe_product_ids
 
 logger = logging.getLogger('uvicorn.error')
 

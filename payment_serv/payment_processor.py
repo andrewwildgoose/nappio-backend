@@ -5,20 +5,17 @@ from typing import Optional
 import stripe
 from gotrue import User
 
+from config.supabase import get_supabase
 from email_serv import email_processor
-from models.payment_models import (
-    CheckoutSessionResponse,
-    PaymentDetailsResponse
-)
+from models.payment_models import CheckoutSessionResponse, PaymentDetailsResponse
 from repositories.payment_repository import insert_checkout_session
+from repositories.product_repository import get_product_by_stripe_price_id
 from repositories.subscription_repository import (
-    update_user_subscription,
-    update_subscription_progress_admin,
     get_subscription_address,
+    update_subscription_progress_admin,
+    update_user_subscription,
 )
 from repositories.user_repository import get_user_by_subscription_id
-from repositories.product_repository import get_product_by_stripe_price_id
-from config.supabase import get_supabase
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -108,7 +105,7 @@ def create_stripe_subscription_checkout_session(
 
         stripe_customer = get_or_create_customer(email=user.email)
 
-        logger.debug(f"create_stripe_subscription_checkout_session(): Billing cycle anchor datetime: {billing_anchor}")
+        logger.debug("create_stripe_subscription_checkout_session(): Resolving billing cycle anchor timezone")
 
         if billing_anchor.tzinfo is None:
             billing_anchor = billing_anchor.replace(tzinfo=timezone.utc)
