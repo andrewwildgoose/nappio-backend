@@ -2,7 +2,8 @@ from typing import Dict, Any
 import logging
 import stripe
 from models.payment_models import WebhookEvent
-from repositories.product_repository import get_products_by_stripe_product_ids
+from supabase import Client
+from ios.io_db import get_products_by_stripe_product_ids
 
 # Get Supabase client from config
 from config.supabase import get_supabase
