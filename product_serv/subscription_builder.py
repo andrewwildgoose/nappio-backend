@@ -1,5 +1,6 @@
 from datetime import datetime
-from repositories.product_repository import get_stripe_price_ids
+from supabase import Client
+from ios.io_db import get_stripe_price_ids
 from models.payment_models import CreateSubscriptionRequest
 import logging
 
