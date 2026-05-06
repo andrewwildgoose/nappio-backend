@@ -59,6 +59,7 @@ def create_stripe_checkout_session(
             mode="payment",
             success_url=f"{frontend_url}/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{frontend_url}{cancel_url}",
+            allow_promotion_codes=True,
             metadata=metadata,
             saved_payment_method_options={
                 "payment_method_save": "enabled"
@@ -136,6 +137,7 @@ def create_stripe_subscription_checkout_session(
             subscription_data=subscription_data,
             success_url=f"{frontend_url}/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{frontend_url}{cancel_url}",
+            allow_promotion_codes=True,
             metadata=metadata
         )
 
