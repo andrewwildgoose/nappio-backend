@@ -113,12 +113,21 @@ def create_stripe_subscription_checkout_session(
         else:
             billing_anchor = billing_anchor.astimezone(timezone.utc)
 
+        billing_anchor = billing_anchor + timedelta(hours=5)
+
         subscription_start_timestamp: int = int(billing_anchor.timestamp())
 
         current_time = datetime.now(timezone.utc)
         five_days_from_now = current_time + timedelta(days=5)
 
-        if billing_anchor > five_days_from_now:
+        if billing_anchor <= current_time:
+            next_anchor = billing_anchor + timedelta(days=7)
+            subscription_data = {
+                "billing_cycle_anchor": int(next_anchor.timestamp()),
+                "proration_behavior": "create_prorations",  # or "none" per policy
+                "metadata": metadata or {},
+            }
+        elif billing_anchor > five_days_from_now:
             subscription_data = {
                 'trial_end': subscription_start_timestamp,
                 'metadata': metadata or {}
