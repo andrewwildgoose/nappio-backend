@@ -1,6 +1,8 @@
+import os
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from dotenv import load_dotenv
 
 import stripe
 from gotrue import User
@@ -18,6 +20,8 @@ from repositories.subscription_repository import (
 from repositories.user_repository import get_user_by_subscription_id
 
 logger = logging.getLogger('uvicorn.error')
+
+load_dotenv()
 
 supabase = get_supabase()
 
@@ -121,7 +125,8 @@ def create_stripe_subscription_checkout_session(
         five_days_from_now = current_time + timedelta(days=5)
 
         if billing_anchor <= current_time:
-            next_anchor = billing_anchor + timedelta(days=7)
+            _subscription_start_delta = int(os.environ.get('SUBSCRIPTION_START_DELTA', 5))
+            next_anchor = billing_anchor + timedelta(days=_subscription_start_delta)
             subscription_data = {
                 "billing_cycle_anchor": int(next_anchor.timestamp()),
                 "proration_behavior": "create_prorations",  # or "none" per policy
