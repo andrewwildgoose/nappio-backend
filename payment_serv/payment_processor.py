@@ -133,7 +133,6 @@ def create_stripe_subscription_checkout_session(
             )
             subscription_data = {
                 'billing_cycle_anchor': int(billing_anchor.timestamp()),
-                'proration_behavior': 'none',
                 'metadata': metadata or {}
             }
         else:
@@ -143,7 +142,6 @@ def create_stripe_subscription_checkout_session(
                 f"min_billing_cycle_anchor_time={min_billing_cycle_anchor_time.isoformat()}"
             )
             subscription_data = {
-                'proration_behavior': 'none',
                 'metadata': metadata or {}
             }
 
