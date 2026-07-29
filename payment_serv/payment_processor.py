@@ -116,9 +116,7 @@ def create_stripe_subscription_checkout_session(
             billing_anchor = billing_anchor.replace(tzinfo=timezone.utc)
         else:
             billing_anchor = billing_anchor.astimezone(timezone.utc)
-
-        billing_anchor = billing_anchor + timedelta(hours=5)
-
+            
         subscription_start_timestamp: int = int(billing_anchor.timestamp())
 
         current_time = datetime.now(timezone.utc)
