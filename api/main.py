@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import newsletter, users, payments, webhooks, admin
+from api.routers import newsletter, users, payments, webhooks, admin, service_config
 
 # Load environment variables from .env file
 load_dotenv()
@@ -65,6 +65,7 @@ app.include_router(users.router)
 app.include_router(payments.router)
 app.include_router(webhooks.router)
 app.include_router(admin.router)
+app.include_router(service_config.router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="trace", reload=True)
