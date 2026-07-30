@@ -21,6 +21,7 @@ COPY api/routers/newsletter.py api/routers/
 COPY api/routers/payments.py api/routers/
 COPY api/routers/users.py api/routers/
 COPY api/routers/webhooks.py api/routers/
+COPY api/routers/service_config.py api/routers/
 COPY config/supabase.py config/
 COPY email_serv/email_processor.py email_serv/
 COPY email_serv/email_utils.py email_serv/
@@ -29,6 +30,7 @@ COPY models/admin_models.py models/
 COPY models/newsletter_models.py models/
 COPY models/payment_models.py models/
 COPY models/user_models.py models/
+COPY models/service_config_models.py models/
 COPY newsletter_serv/newsletter_service.py newsletter_serv/
 COPY payment_serv/webhook_handlers.py payment_serv/
 COPY payment_serv/payment_processor.py payment_serv/
@@ -41,6 +43,7 @@ COPY repositories/payment_repository.py repositories/
 COPY repositories/product_repository.py repositories/
 COPY repositories/subscription_repository.py repositories/
 COPY repositories/user_repository.py repositories/
+COPY repositories/service_config_repository.py repositories/
 COPY user_serv/user_service.py user_serv/
 
 # Set environment variables
