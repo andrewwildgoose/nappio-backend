@@ -38,6 +38,7 @@ class VoucherVerificationResult(BaseModel):
     eligible: bool
     message: str
     code: Optional[str] = None
+    postcode: Optional[str] = None
     discount_code: Optional[str] = None
     voucher_type: Optional[str] = None
     failure_reason: Optional[
@@ -50,6 +51,7 @@ class AppliedVoucher(BaseModel):
     postcode: str
     discount_code: str
     voucher_type: str = 'RNFL'
+
 
 class CreateSubscriptionRequest(BaseModel):
     babyBirthdate: str  # Will receive as YYYY-MM-DD string

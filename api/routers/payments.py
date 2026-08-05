@@ -57,7 +57,7 @@ async def verify_voucher(
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(f"verify_voucher(): Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to verify voucher")
 
 
 @router.post("/subscriptions", response_model=CheckoutSessionResponse)
@@ -150,9 +150,11 @@ async def start_subscription(
 
         return checkout_session
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"start_subscription(): Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to start subscription")
 
 
 @router.post("/subscriptions/pause", response_model=PauseSubscriptionResponse)

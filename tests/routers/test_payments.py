@@ -122,6 +122,24 @@ class TestGetPaymentDetails:
 
 
 class TestStartupWebhookProcessing:
+    def test_marks_redeemed_when_redeem_succeeds(self):
+        from payment_serv import payment_processor as pp
+
+        with patch('payment_serv.payment_processor.update_user_subscription'), \
+             patch('payment_serv.payment_processor.update_subscription_progress_admin'), \
+             patch.object(pp, 'supabase') as mock_supabase, \
+             patch('payment_serv.payment_processor.get_product_by_stripe_price_id', return_value={'name': 'Setup', 'currency': 'gbp', 'price': 7000, 'type': 'oneoff'}), \
+             patch('payment_serv.payment_processor.get_user_by_subscription_id', return_value={'email': 'user@example.com', 'user_metadata': {'first_name': 'Test', 'surname': 'Tester'}}), \
+             patch('payment_serv.payment_processor.get_voucher_by_subscription_id', return_value={'code': 'RNF1', 'postcode': 'N1 1AA', 'type': 'RNFL', 'status': 'verified'}), \
+             patch('payment_serv.payment_processor.voucher_service.redeem_voucher'), \
+             patch('payment_serv.payment_processor.update_voucher_status', return_value={'status': 'redeemed'}) as update_status, \
+             patch('payment_serv.payment_processor.email_processor.send_new_subscription_email'), \
+             patch('payment_serv.payment_processor.get_subscription_address', return_value={}), \
+             patch('payment_serv.payment_processor.email_processor.send_order_email_to_team'):
+            mock_supabase.table.return_value.select.return_value.eq.return_value.execute.side_effect = [MagicMock(data=[])]
+            pp.startup_costs_paid_processing('sub-1', {'object': {'customer': 'cus_1', 'amount_total': 7000, 'id': 'cs_1'}}, [{'price': 'price_1', 'quantity': 1}])
+        update_status.assert_called_with('RNF1', 'redeemed')
+
     def test_marks_manual_review_when_redeem_fails(self):
         from payment_serv import payment_processor as pp
 

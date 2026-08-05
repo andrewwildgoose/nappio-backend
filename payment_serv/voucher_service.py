@@ -39,9 +39,15 @@ def _headers() -> dict:
     if not RNFL_API_URL or not RNFL_BEARER_TOKEN:
         raise VoucherServiceError('RNFL voucher configuration is missing')
     return {
-        'Authorization': f'******',
+        'Authorization': 'Bearer ' + RNFL_BEARER_TOKEN,
         'Content-Type': 'application/json',
     }
+
+
+def _base_url() -> str:
+    if not RNFL_API_URL:
+        raise VoucherServiceError('RNFL voucher configuration is missing')
+    return RNFL_API_URL.rstrip('/')
 
 
 def _classify_failure(status_code: int, payload: Optional[dict]) -> VoucherVerificationResult:
@@ -78,9 +84,10 @@ def _classify_failure(status_code: int, payload: Optional[dict]) -> VoucherVerif
 def verify_voucher(voucher_code: str, postcode: str) -> VoucherVerificationResult:
     """Verify an RNFL voucher."""
     try:
+        headers = _headers()
         response = requests.post(
-            f"{RNFL_API_URL.rstrip('/')}/api/supplier/vouchers/verify",
-            headers=_headers(),
+            f"{_base_url()}/api/supplier/vouchers/verify",
+            headers=headers,
             json={
                 'voucher_code': voucher_code,
                 'postcode': postcode,
@@ -96,6 +103,7 @@ def verify_voucher(voucher_code: str, postcode: str) -> VoucherVerificationResul
             eligible=True,
             message='Voucher verified successfully.',
             code=voucher_code,
+            postcode=postcode,
             discount_code=get_discount_code('RNFL'),
             voucher_type='RNFL',
         )
@@ -104,11 +112,17 @@ def verify_voucher(voucher_code: str, postcode: str) -> VoucherVerificationResul
     raise VoucherVerificationFailed(_classify_failure(response.status_code, payload))
 
 
-def redeem_voucher(voucher_code: str, postcode: str, amount: str, supplier_reference: str, surname: Optional[str] = None) -> None:
-    """Redeem an RNFL voucher after successful checkout."""
+def redeem_voucher(
+    voucher_code: str,
+    postcode: str,
+    amount_gbp: str,
+    supplier_reference: str,
+    surname: Optional[str] = None
+) -> None:
+    """Redeem an RNFL voucher after successful checkout using a GBP string like '70.00'."""
     payload = {
         'voucher_code': voucher_code,
-        'amount': amount,
+        'amount': amount_gbp,
         'postcode': postcode,
         'supplier_reference': supplier_reference,
     }
@@ -116,9 +130,10 @@ def redeem_voucher(voucher_code: str, postcode: str, amount: str, supplier_refer
         payload['surname'] = surname
 
     try:
+        headers = _headers()
         response = requests.post(
-            f"{RNFL_API_URL.rstrip('/')}/api/supplier/vouchers/redeem",
-            headers=_headers(),
+            f"{_base_url()}/api/supplier/vouchers/redeem",
+            headers=headers,
             json=payload,
             timeout=10,
         )

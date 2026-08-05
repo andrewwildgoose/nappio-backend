@@ -72,6 +72,7 @@ def create_stripe_checkout_session(
             }
         }
         if coupon_id:
+            session_args.pop("allow_promotion_codes", None)
             session_args["discounts"] = [{"coupon": coupon_id}]
 
         session = stripe.checkout.Session.create(**session_args)
@@ -299,9 +300,9 @@ def startup_costs_paid_processing(subscription_id: str, event_data: dict, line_i
                 voucher_service.redeem_voucher(
                     voucher_code=voucher["code"],
                     postcode=voucher["postcode"],
-                    amount=amount,
+                    amount_gbp=amount,
                     supplier_reference=event_data['object']['id'],
-                    surname=user.get("user_metadata", {}).get("surname") if user else None,
+                    surname=user.get("user_metadata", {}).get("surname"),
                 )
                 updated_voucher = update_voucher_status(voucher["code"], "redeemed")
                 if updated_voucher:
