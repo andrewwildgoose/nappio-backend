@@ -9,6 +9,7 @@ from gotrue import User
 from config.supabase import get_supabase
 from email_serv import email_processor
 from models.payment_models import CheckoutSessionResponse, PaymentDetailsResponse
+from payment_serv import voucher_service
 from repositories.payment_repository import insert_checkout_session
 from repositories.product_repository import get_product_by_stripe_price_id
 from repositories.subscription_repository import (
@@ -17,6 +18,7 @@ from repositories.subscription_repository import (
     update_user_subscription,
 )
 from repositories.user_repository import get_user_by_subscription_id
+from repositories.voucher_repository import get_voucher_by_subscription_id, update_voucher_status
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -48,7 +50,8 @@ def create_stripe_checkout_session(
         user: User,
         frontend_url: str,
         cancel_url: str,
-        metadata: Optional[dict] = None
+        metadata: Optional[dict] = None,
+        coupon_id: Optional[str] = None
     ) -> CheckoutSessionResponse:
     """Creates a Stripe one-off payment checkout session."""
     try:
@@ -56,18 +59,22 @@ def create_stripe_checkout_session(
 
         stripe_customer = get_or_create_customer(email=user.email)
 
-        session = stripe.checkout.Session.create(
-            customer=stripe_customer.id,
-            line_items=line_items,
-            mode="payment",
-            success_url=f"{frontend_url}/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{frontend_url}{cancel_url}",
-            allow_promotion_codes=True,
-            metadata=metadata,
-            saved_payment_method_options={
+        session_args = {
+            "customer": stripe_customer.id,
+            "line_items": line_items,
+            "mode": "payment",
+            "success_url": f"{frontend_url}/success?session_id={{CHECKOUT_SESSION_ID}}",
+            "cancel_url": f"{frontend_url}{cancel_url}",
+            "allow_promotion_codes": True,
+            "metadata": metadata,
+            "saved_payment_method_options": {
                 "payment_method_save": "enabled"
             }
-        )
+        }
+        if coupon_id:
+            session_args["discounts"] = [{"coupon": coupon_id}]
+
+        session = stripe.checkout.Session.create(**session_args)
 
         logger.info(f"create_stripe_checkout_session(): Checkout session created with ID {session.id}")
 
@@ -277,7 +284,34 @@ def startup_costs_paid_processing(subscription_id: str, event_data: dict, line_i
         customer_name = user.get("user_metadata", {}).get("first_name")
         customer_email = user.get("email")
 
-        email_processor.send_new_subscription_email(customer_email, customer_name, product_details)
+        voucher = get_voucher_by_subscription_id(subscription_id)
+        voucher_info = None
+        if voucher:
+            voucher_info = {
+                "code": voucher["code"],
+                "postcode": voucher["postcode"],
+                "type": voucher["type"],
+                "status": voucher["status"],
+            }
+            try:
+                amount_total = event_data['object'].get('amount_total', 0)
+                amount = f"{amount_total / 100:.2f}"
+                voucher_service.redeem_voucher(
+                    voucher_code=voucher["code"],
+                    postcode=voucher["postcode"],
+                    amount=amount,
+                    supplier_reference=event_data['object']['id'],
+                    surname=user.get("user_metadata", {}).get("surname") if user else None,
+                )
+                updated_voucher = update_voucher_status(voucher["code"], "redeemed")
+                if updated_voucher:
+                    voucher_info["status"] = updated_voucher["status"]
+            except voucher_service.VoucherServiceError:
+                updated_voucher = update_voucher_status(voucher["code"], "manual-review")
+                if updated_voucher:
+                    voucher_info["status"] = updated_voucher["status"]
+
+        email_processor.send_new_subscription_email(customer_email, customer_name, product_details, voucher_info=voucher_info)
 
         team_email_subject = f"New Subscription: {customer_email}"
         subscription_address_res = get_subscription_address(subscription_id)
@@ -286,7 +320,8 @@ def startup_costs_paid_processing(subscription_id: str, event_data: dict, line_i
             customer_email=customer_email,
             customer_name=customer_name,
             customer_address=subscription_address_res,
-            items=product_details
+            items=product_details,
+            voucher_info=voucher_info
         )
 
     except Exception as e:

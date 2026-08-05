@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, model_validator
 
@@ -28,6 +28,29 @@ class CheckoutSessionResponse(BaseModel):
     session_id: str
     metadata: Optional[dict] = None
 
+
+class VoucherVerificationRequest(BaseModel):
+    voucher_code: str
+    postcode: str
+
+
+class VoucherVerificationResult(BaseModel):
+    eligible: bool
+    message: str
+    code: Optional[str] = None
+    discount_code: Optional[str] = None
+    voucher_type: Optional[str] = None
+    failure_reason: Optional[
+        Literal['not_found', 'already_used', 'postcode_mismatch', 'unavailable', 'service_error']
+    ] = None
+
+
+class AppliedVoucher(BaseModel):
+    code: str
+    postcode: str
+    discount_code: str
+    voucher_type: str = 'RNFL'
+
 class CreateSubscriptionRequest(BaseModel):
     babyBirthdate: str  # Will receive as YYYY-MM-DD string
     babyWeight: float  # Changed from Decimal since we're receiving a float
@@ -38,6 +61,7 @@ class CreateSubscriptionRequest(BaseModel):
     addressId: Optional[str] = None  # ID for existing address
     cancelUrl: Optional[str] = '/'
     metadata: Optional[dict] = None  # Optional metadata to pass to the payment provider
+    voucher: Optional[AppliedVoucher] = None
 
     @model_validator(mode='after')
     def check_address_or_address_id(self):

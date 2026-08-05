@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 import admin_serv.subscriptions as subscriptions_admin
 import payment_serv.payment_processor as pa
+import payment_serv.voucher_service as voucher_service
 import product_serv.subscription_builder as sub_builder
 import user_serv.user_service as user_service
 from api.dependencies.auth import get_authenticated_user
@@ -16,6 +17,8 @@ from models.payment_models import (
     PauseSubscriptionResponse,
     PaymentDetailsRequest,
     PaymentDetailsResponse,
+    VoucherVerificationRequest,
+    VoucherVerificationResult,
 )
 from models.user_models import (
     AddUserAddressRequest,
@@ -26,6 +29,8 @@ from repositories.subscription_repository import (
     insert_subscription_progress,
     insert_user_subscription,
 )
+from repositories.user_repository import get_user_addresses
+from repositories.voucher_repository import insert_voucher
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -35,6 +40,24 @@ router = APIRouter(
     prefix="/api/v1",
     tags=["payments"]
 )
+
+
+@router.post('/vouchers/verify', response_model=VoucherVerificationResult)
+async def verify_voucher(
+    request: VoucherVerificationRequest,
+    user=Depends(get_authenticated_user)
+):
+    """Verify an RNFL voucher before checkout."""
+    try:
+        logger.debug(f"verify_voucher(): Verifying voucher for user {user.id}")
+        return voucher_service.verify_voucher(request.voucher_code, request.postcode)
+    except voucher_service.VoucherVerificationFailed as e:
+        return e.result
+    except voucher_service.VoucherServiceError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.error(f"verify_voucher(): Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/subscriptions", response_model=CheckoutSessionResponse)
@@ -48,6 +71,12 @@ async def start_subscription(
 
         if request.addressId:
             address_id = request.addressId
+            user_addresses = get_user_addresses(user.id)
+            address_lookup = {str(address.id): address for address in user_addresses}
+            selected_address = address_lookup.get(str(address_id))
+            if not selected_address:
+                raise HTTPException(status_code=404, detail="Address not found")
+            postcode = selected_address.postcode
         else:
             address_obj = AddUserAddressRequest(
                 address_line_1=request.address["address_line_1"],
@@ -59,6 +88,7 @@ async def start_subscription(
             )
             address_response = user_service.add_user_address(address_obj, user.id)
             address_id = str(address_response.address.id)
+            postcode = address_response.address.postcode
 
         subscription = insert_user_subscription(
             status="pending",
@@ -88,6 +118,25 @@ async def start_subscription(
             "checkout_type": "start_up"
         }
 
+        coupon_id = None
+        if request.voucher:
+            if request.voucher.postcode.strip().lower() != postcode.strip().lower():
+                raise HTTPException(status_code=400, detail="Voucher postcode must match the subscription address postcode")
+            insert_voucher(
+                subscription_id=subscription['id'],
+                code=request.voucher.code,
+                postcode=request.voucher.postcode,
+                status="verified",
+                voucher_type=request.voucher.voucher_type,
+            )
+            coupon_id = request.voucher.discount_code
+            metadata.update({
+                "voucher_code": request.voucher.code,
+                "voucher_postcode": request.voucher.postcode,
+                "voucher_type": request.voucher.voucher_type,
+                "voucher_discount_code": request.voucher.discount_code,
+            })
+
         startup_line_items = sub_builder.build_stripe_startup_cost_items()
 
         checkout_session = pa.create_stripe_checkout_session(
@@ -95,7 +144,8 @@ async def start_subscription(
             user=user,
             frontend_url=FRONTEND_URL,
             cancel_url=request.cancelUrl,
-            metadata=metadata
+            metadata=metadata,
+            coupon_id=coupon_id,
         )
 
         return checkout_session
