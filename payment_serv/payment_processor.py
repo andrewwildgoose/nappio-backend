@@ -1,4 +1,3 @@
-import os
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -117,32 +116,39 @@ def create_stripe_subscription_checkout_session(
         else:
             billing_anchor = billing_anchor.astimezone(timezone.utc)
 
-        billing_anchor = billing_anchor + timedelta(hours=5)
-
-        subscription_start_timestamp: int = int(billing_anchor.timestamp())
-
         current_time = datetime.now(timezone.utc)
-        five_days_from_now = current_time + timedelta(days=5)
+        min_billing_cycle_anchor_time = current_time + timedelta(hours=48)
 
-        if billing_anchor <= current_time:
-            _subscription_start_delta = int(os.environ.get('SUBSCRIPTION_START_DELTA', 5))
-            next_anchor = billing_anchor + timedelta(days=_subscription_start_delta)
+        logger.debug(
+            "create_stripe_subscription_checkout_session(): Anchor decision inputs - "
+            f"billing_anchor={billing_anchor.isoformat()}, "
+            f"current_time={current_time.isoformat()}, "
+            f"min_billing_cycle_anchor_time={min_billing_cycle_anchor_time.isoformat()}"
+        )
+
+        if billing_anchor >= min_billing_cycle_anchor_time:
+            logger.debug(
+                "create_stripe_subscription_checkout_session(): Using billing_cycle_anchor "
+                f"because billing_anchor is at least 48h ahead. billing_anchor={billing_anchor.isoformat()}"
+            )
             subscription_data = {
-                "billing_cycle_anchor": int(next_anchor.timestamp()),
-                "proration_behavior": "create_prorations",  # or "none" per policy
-                "metadata": metadata or {},
-            }
-        elif billing_anchor > five_days_from_now:
-            subscription_data = {
-                'trial_end': subscription_start_timestamp,
+                'billing_cycle_anchor': int(billing_anchor.timestamp()),
                 'metadata': metadata or {}
             }
         else:
+            logger.debug(
+                "create_stripe_subscription_checkout_session(): Using immediate-start subscription_data "
+                f"because billing_anchor is less than 48h ahead. billing_anchor={billing_anchor.isoformat()}, "
+                f"min_billing_cycle_anchor_time={min_billing_cycle_anchor_time.isoformat()}"
+            )
             subscription_data = {
-                'billing_cycle_anchor': subscription_start_timestamp,
-                'proration_behavior': 'none',
                 'metadata': metadata or {}
             }
+
+        logger.debug(
+            "create_stripe_subscription_checkout_session(): Final subscription_data keys="
+            f"{list(subscription_data.keys())}, values={subscription_data}"
+        )
 
         session = stripe.checkout.Session.create(
             customer=stripe_customer.id,
