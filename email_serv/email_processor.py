@@ -201,7 +201,7 @@ def send_newsletter_signup_to_team(subscriber_email: str, subscriber_name: str, 
         logger.exception(f"Failed to send email to {TEAM_EMAIL}: {str(e)}")
         return {"status": 500, "error": str(e)}
 
-def send_new_subscription_email(to_email: str, first_name: str, subscription_items: list[dict]):
+def send_new_subscription_email(to_email: str, first_name: str, subscription_items: list[dict], voucher_info: dict | None = None):
     """
     Send a subscription confirmation email to the specified recipient using MailerSend.
     """
@@ -248,6 +248,11 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
             <p>Hi {first_name},</p>
             <p>Congratulations on starting your subscription journey with Nappio!</p>
         """
+        if voucher_info:
+            html_content += (
+                f"<p><strong>Voucher applied:</strong> {voucher_info.get('type', 'Voucher')} "
+                f"({voucher_info.get('code')}) - status: {voucher_info.get('status')}</p>"
+            )
         # Add one-off items table if there are any
         if subscription_items_oneoff:
             html_content += f"""
@@ -342,6 +347,12 @@ def send_new_subscription_email(to_email: str, first_name: str, subscription_ite
                 plaintext_content += f"\n{item['item_name']:<30}{item['cost']:>12}"
 
             plaintext_content += f"\n{'=' * 50}"
+
+        if voucher_info:
+            plaintext_content += (
+                f"\nVoucher applied: {voucher_info.get('type', 'Voucher')} "
+                f"({voucher_info.get('code')}) - status: {voucher_info.get('status')}\n"
+            )
 
         plaintext_content += f"""
 
@@ -613,7 +624,7 @@ def send_meeting_confirm_and_sub_checkout_email(to_email: str, first_name: str, 
         logger.exception(f"Failed to send email to {to_email}: {str(e)}")
         return {"status": 500, "error": str(e)}
 
-def send_order_email_to_team(subject: str, customer_email: str, customer_name: str, customer_address: dict, items: list[dict]):
+def send_order_email_to_team(subject: str, customer_email: str, customer_name: str, customer_address: dict, items: list[dict], voucher_info: dict | None = None):
     """
     Send an email to the internal team using MailerSend.
     """
@@ -646,7 +657,14 @@ def send_order_email_to_team(subject: str, customer_email: str, customer_name: s
 
             <p><strong>Customer:</strong> {customer_name}<br>
             <strong>Email:</strong> {customer_email}</p>
-            
+        """
+        if voucher_info:
+            html_content += f"""
+            <p><strong>Voucher:</strong> {voucher_info.get('type', 'Voucher')} ({voucher_info.get('code')})<br>
+            <strong>Voucher status:</strong> {voucher_info.get('status')}<br>
+            <strong>Voucher postcode:</strong> {voucher_info.get('postcode')}</p>
+            """
+        html_content += f"""
             <p><strong>Location Address:</strong></p>
             <p style="margin-left: 20px; background-color: #f4f3ed; padding: 10px; border-left: 4px solid #f7b18a;">{formatted_address}</p>
 
@@ -703,6 +721,12 @@ def send_order_email_to_team(subject: str, customer_email: str, customer_name: s
 
             Go to Admin Dashboard: {ADMIN_DASHBOARD_URL}
         """
+        if voucher_info:
+            plaintext_content += (
+                f"\nVoucher: {voucher_info.get('type', 'Voucher')} ({voucher_info.get('code')})"
+                f"\nVoucher status: {voucher_info.get('status')}"
+                f"\nVoucher postcode: {voucher_info.get('postcode')}\n"
+            )
 
         for item in items:
             plaintext_content += f"\n{item['item_name']:<30}{item['quantity']:>8}{item['cost']:>12}"

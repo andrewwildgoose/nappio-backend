@@ -63,11 +63,16 @@ SUPABASE_URL=your_supabase_url
 SUPABASE_API_KEY=your_supabase_api_key
 STRIPE_SECRET_KEY=your_stripe_secret_key
 SENDGRID_API_KEY=your_sendgrid_api_key
+RNFL_API_URL=your_rnfl_api_url
+RNFL_BEARER_TOKEN=your_rnfl_bearer_token
+RNFL_40_STRIPE_ID=your_rnfl_stripe_coupon_id
 ```
 
 - SUPABASE_URL and SUPABASE_API_KEY are provided when you set up your Supabase project.
 - STRIPE_SECRET_KEY is obtained from your Stripe account.
 - SENDGRID_API_KEY is needed if you plan to send emails via SendGrid.
+- RNFL_API_URL and RNFL_BEARER_TOKEN are used for RNFL voucher verification/redeem requests.
+- RNFL_40_STRIPE_ID is the current RNFL Stripe coupon mapping; future voucher coupon mappings should follow the same env-driven pattern.
 
 ### 5. Run the FastAPI Backend Locally
 
