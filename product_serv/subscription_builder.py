@@ -12,14 +12,14 @@ logger = logging.getLogger('uvicorn.error')
 NAPPY_RULES = [
     {"min_weight": 0, "max_weight": 6, "serviceLevel": "full-time", "product_id": "45bf677e-02e4-4b4f-8e8b-84eb47d46b89"},
     {"min_weight": 0, "max_weight": 6, "serviceLevel": "part-time", "product_id": "4b00c71a-e2f6-4a2e-9e06-0cfe009bbcd7"},
-    {"min_weight": 6, "max_weight": 36, "serviceLevel": "full-time", "product_id": "dfd5cc56-859d-4c40-9f25-2ae5dac2aca1"},
-        {"min_weight": 6, "max_weight": 36, "serviceLevel": "part-time", "product_id": "b8bc8da7-ffa6-4e5e-943f-75c2ab9c12aa"},
+    {"min_weight": 7, "max_weight": 36, "serviceLevel": "full-time", "product_id": "dfd5cc56-859d-4c40-9f25-2ae5dac2aca1"},
+        {"min_weight": 7, "max_weight": 36, "serviceLevel": "part-time", "product_id": "b8bc8da7-ffa6-4e5e-943f-75c2ab9c12aa"},
 ]
 
 # Marked for removal - leaving in as may reintroduce later
 # WRAP_RULES = [
 #     {"min_weight": 0, "max_weight": 6, "product_id": "e5c2656e-f6db-4a2e-a642-cbceceb56054"},
-#     {"min_weight": 6, "max_weight": 36, "product_id": "8e6bb3ed-eb3c-4812-8f65-9c2c93379fc4"},
+#     {"min_weight": 7, "max_weight": 36, "product_id": "8e6bb3ed-eb3c-4812-8f65-9c2c93379fc4"},
 # ]
 
 def determine_age(birthdate: datetime) -> int:
