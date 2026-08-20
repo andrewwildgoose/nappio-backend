@@ -10,8 +10,8 @@ supabase = get_supabase()
 
 def insert_checkout_session(
     session_id: str,
-    user_id: str,
-    customer_id: str,
+    user_id: Optional[str],
+    customer_id: Optional[str],
     line_items: list[dict],
     status: str = "pending",
     metadata: Optional[dict] = None

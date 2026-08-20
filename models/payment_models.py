@@ -88,3 +88,41 @@ class PauseSubscriptionRequest(BaseModel):
 
 class PauseSubscriptionResponse(BaseModel):
     message: str
+
+
+class CartItem(BaseModel):
+    product_id: str
+    quantity: int
+
+
+class CreateOrderCheckoutRequest(BaseModel):
+    items: list[CartItem]
+    address: Optional[dict] = None
+    address_id: Optional[str] = None
+    cancel_url: Optional[str] = '/'
+
+    @model_validator(mode='after')
+    def check_address_or_address_id(self):
+        """Ensure either address or addressId is provided, but not both."""
+        if self.address is None and self.address_id is None:
+            raise ValueError('Either address or address_id must be provided')
+        if self.address is not None and self.address_id is not None:
+            raise ValueError('Cannot provide both address and address_id')
+        return self
+
+
+class GuestCreateOrderCheckoutRequest(BaseModel):
+    items: list[CartItem]
+    guest_email: str
+    address: Optional[dict] = None
+    address_id: Optional[str] = None
+    cancel_url: Optional[str] = '/'
+
+    @model_validator(mode='after')
+    def check_address_or_address_id(self):
+        """Ensure either address or address_id is provided, but not both."""
+        if self.address is None and self.address_id is None:
+            raise ValueError('Either address or address_id must be provided')
+        if self.address is not None and self.address_id is not None:
+            raise ValueError('Cannot provide both address and address_id')
+        return self
