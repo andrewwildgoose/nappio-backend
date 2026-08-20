@@ -44,6 +44,23 @@ def get_products_by_stripe_product_ids(stripe_product_ids: list[str]) -> Optiona
         raise
 
 
+def get_active_shop_products(product_type: str = "oneoff") -> list[dict]:
+    """Retrieve all active products of the given type for the shop."""
+    try:
+        response = (
+            supabase.table('product')
+            .select('*')
+            .eq('active', True)
+            .eq('type', product_type)
+            .execute()
+        )
+        logger.debug(f"get_active_shop_products(): Retrieved {len(response.data)} products of type '{product_type}'")
+        return response.data if response.data else []
+    except Exception as e:
+        logger.error(f"get_active_shop_products(): Error fetching shop products: {str(e)}")
+        raise
+
+
 def get_product_by_stripe_price_id(stripe_price_id: str) -> dict:
     """Retrieve product details by Stripe price ID."""
     try:

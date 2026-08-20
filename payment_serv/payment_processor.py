@@ -47,30 +47,43 @@ def get_or_create_customer(email: str) -> stripe.Customer:
 
 def create_stripe_checkout_session(
         line_items: list[dict],
-        user: User,
         frontend_url: str,
         cancel_url: str,
+        user: Optional[User] = None,
+        guest_email: Optional[str] = None,
         metadata: Optional[dict] = None,
         coupon_id: Optional[str] = None
     ) -> CheckoutSessionResponse:
-    """Creates a Stripe one-off payment checkout session."""
+    """Creates a Stripe one-off payment checkout session.
+
+    Supports both authenticated users (pass ``user``) and guests (pass ``guest_email``).
+    For authenticated users a Stripe Customer is created/reused so that saved payment
+    methods are offered. For guests the email is collected at the Stripe-hosted checkout
+    page instead.
+    """
     try:
-        logger.info(f"create_stripe_checkout_session(): Creating checkout session for user {user.id} with line items {line_items}")
+        if user is None and not guest_email:
+            raise ValueError("Either user or guest_email must be provided")
 
-        stripe_customer = get_or_create_customer(email=user.email)
+        log_identity = user.id if user else f"guest:{guest_email}"
+        logger.info(f"create_stripe_checkout_session(): Creating checkout session for {log_identity} with line items {line_items}")
 
-        session_args = {
-            "customer": stripe_customer.id,
+        session_args: dict = {
             "line_items": line_items,
             "mode": "payment",
             "success_url": f"{frontend_url}/success?session_id={{CHECKOUT_SESSION_ID}}",
             "cancel_url": f"{frontend_url}{cancel_url}",
             "allow_promotion_codes": True,
             "metadata": metadata,
-            "saved_payment_method_options": {
-                "payment_method_save": "enabled"
-            }
         }
+
+        if user is not None:
+            stripe_customer = get_or_create_customer(email=user.email)
+            session_args["customer"] = stripe_customer.id
+            session_args["saved_payment_method_options"] = {"payment_method_save": "enabled"}
+        else:
+            session_args["customer_email"] = guest_email
+
         if coupon_id:
             session_args.pop("allow_promotion_codes", None)
             session_args["discounts"] = [{"coupon": coupon_id}]
@@ -81,19 +94,19 @@ def create_stripe_checkout_session(
 
         insert_checkout_session(
             session_id=session.id,
-            user_id=user.id,
+            user_id=user.id if user else None,
             customer_id=session.customer,
             line_items=line_items,
             metadata=metadata
         )
 
-        logger.info(f"create_stripe_checkout_session(): Checkout session stored in Supabase for user {user.id} with session ID {session.id}")
+        logger.info(f"create_stripe_checkout_session(): Checkout session stored in Supabase for {log_identity} with session ID {session.id}")
 
-        return {
-            "checkout_url": session.url,
-            "session_id": session.id,
-            "metadata": metadata
-        }
+        return CheckoutSessionResponse(
+            checkout_url=session.url,
+            session_id=session.id,
+            metadata=metadata
+        )
 
     except stripe.error.StripeError as e:
         logger.error(f"create_stripe_checkout_session(): Stripe error: {str(e)}")
@@ -213,7 +226,7 @@ def get_payment_completed_details(session_id: str) -> PaymentDetailsResponse:
         raise
 
 
-def paid_processing(checkout_type: str, subscription_id: str, event_data: dict, line_items: list) -> None:
+def paid_processing(checkout_type: str, event_data: dict, line_items: list, subscription_id: Optional[str] = None, order_id: Optional[str] = None) -> None:
     """Route payment processing based on checkout type."""
     try:
         logger.info(f"paid_processing(): Processing payment for checkout type: {checkout_type}")
@@ -222,6 +235,8 @@ def paid_processing(checkout_type: str, subscription_id: str, event_data: dict, 
                 startup_costs_paid_processing(subscription_id, event_data, line_items)
             case "subscription":
                 subscription_paid_processing(subscription_id, event_data)
+            case "one_off_purchase":
+                one_off_purchase_paid_processing(order_id, event_data)
             case _:
                 logger.warning(f"paid_processing(): Unknown checkout type: {checkout_type}")
                 raise ValueError(f"Unknown checkout type: {checkout_type}")
@@ -395,4 +410,58 @@ def pause_subscription(subscription_id: str, stripe_subscription_id: str, pause_
         logger.info(f"pause_subscription(): Subscription {subscription_id} paused successfully")
     except Exception as e:
         logger.error(f"pause_subscription(): Error pausing subscription {subscription_id}: {str(e)}")
+        raise
+
+
+def one_off_purchase_paid_processing(order_id: str, event_data: dict) -> None:
+    """Process a completed one-off shop purchase: update order status and send confirmation emails."""
+    try:
+        logger.info(f"one_off_purchase_paid_processing(): Processing order {order_id}")
+
+        update_order_status(order_id, "paid")
+
+        order = get_order(order_id)
+        order_items = get_order_items(order_id)
+
+        product_details = []
+        for item in order_items:
+            product = item.get('product') or {}
+            product_details.append({
+                "item_name": product.get('name', 'Unknown item'),
+                "cost": f'{product.get("currency", "GBP").upper()} {item["price_at_purchase"] / 100:.2f}',
+                "quantity": item['quantity'],
+                "type": product.get('type', 'oneoff'),
+            })
+
+        customer_email = event_data['object'].get('customer_details', {}).get('email')
+        customer_name = event_data['object'].get('customer_details', {}).get('name') or 'Customer'
+
+        if customer_email:
+            email_processor.send_order_confirmation_email(
+                to_email=customer_email,
+                first_name=customer_name,
+                items=product_details,
+                order_id=order_id
+            )
+
+        team_email_subject = f"New Shop Order: {customer_email or order_id}"
+        address_id = order.get('address_id') if order else None
+        customer_address = {}
+        if address_id:
+            address_response = supabase.table('user_addresses').select('*').eq('id', address_id).execute()
+            if address_response.data:
+                customer_address = address_response.data[0]
+
+        email_processor.send_order_email_to_team(
+            subject=team_email_subject,
+            customer_email=customer_email or 'unknown',
+            customer_name=customer_name,
+            customer_address=customer_address,
+            items=product_details
+        )
+
+        logger.info(f"one_off_purchase_paid_processing(): Completed processing for order {order_id}")
+
+    except Exception as e:
+        logger.error(f"one_off_purchase_paid_processing(): Error: {str(e)}")
         raise
