@@ -141,6 +141,7 @@ def create_stripe_subscription_checkout_session(
             )
             subscription_data = {
                 'billing_cycle_anchor': int(billing_anchor.timestamp()),
+                "proration_behavior": "none",
                 'metadata': metadata or {}
             }
         else:
