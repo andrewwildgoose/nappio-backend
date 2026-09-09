@@ -22,7 +22,9 @@ def insert_voucher(subscription_id: str, code: str, postcode: str, status: str, 
 
 def get_voucher_by_subscription_id(subscription_id: str) -> Optional[dict]:
     """Fetch voucher by subscription id."""
+    logger.debug(f"Fetching voucher for subscription_id: {subscription_id}")
     response = supabase.table('vouchers').select('*').eq('subscription_id', subscription_id).execute()
+    logger.debug(f"Supabase response: {response}")
     return response.data[0] if response.data else None
 
 
