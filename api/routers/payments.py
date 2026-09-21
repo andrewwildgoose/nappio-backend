@@ -50,13 +50,14 @@ async def verify_voucher(
     """Verify an RNFL voucher before checkout."""
     try:
         logger.debug(f"verify_voucher(): Verifying voucher for user {user.id}")
+        logger.debug(f"verify_voucher(): Request {request.model_dump()}")
         return voucher_service.verify_voucher(request.voucher_code, request.postcode)
     except voucher_service.VoucherVerificationFailed as e:
         return e.result
     except voucher_service.VoucherServiceError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        logger.error(f"verify_voucher(): Error: {str(e)}")
+        logger.error(f"verify_voucher(): Error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to verify voucher")
 
 

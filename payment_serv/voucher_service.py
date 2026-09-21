@@ -51,9 +51,27 @@ def _base_url() -> str:
 
 
 def _classify_failure(status_code: int, payload: Optional[dict]) -> VoucherVerificationResult:
+    payload = payload or {}
+
     raw_message = ''
     if isinstance(payload, dict):
-        raw_message = str(payload.get('message') or payload.get('detail') or payload.get('error') or '')
+        error_details = payload.get('error')
+        if isinstance(error_details, dict):
+            raw_message = str(
+                error_details.get('message')
+                or error_details.get('detail')
+                or error_details.get('error')
+                or payload.get('message')
+                or payload.get('detail')
+                or ''
+            )
+        else:
+            raw_message = str(
+                payload.get('message')
+                or payload.get('detail')
+                or error_details
+                or ''
+            )
     normalized = raw_message.lower()
 
     if status_code == 404 or 'not found' in normalized or 'does not exist' in normalized:
@@ -81,12 +99,34 @@ def _classify_failure(status_code: int, payload: Optional[dict]) -> VoucherVerif
     )
 
 
+def _parse_error_payload(response: requests.Response) -> Optional[dict]:
+    if not response.content:
+        return {}
+
+    try:
+        payload = response.json()
+    except ValueError:
+        fallback_text = response.text.strip() if response.text else 'Voucher service returned an invalid response.'
+        logger.warning(
+            'verify_voucher(): RNFL returned non-JSON response. status=%s body=%s',
+            response.status_code,
+            fallback_text[:500],
+        )
+        return {'message': fallback_text}
+
+    if isinstance(payload, dict):
+        return payload
+    if payload is None:
+        return {}
+    return {'message': str(payload)}
+
+
 def verify_voucher(voucher_code: str, postcode: str) -> VoucherVerificationResult:
     """Verify an RNFL voucher."""
     try:
         headers = _headers()
         response = requests.post(
-            f"{_base_url()}/api/supplier/vouchers/verify",
+            f"{_base_url()}/vouchers/verify",
             headers=headers,
             json={
                 'voucher_code': voucher_code,
@@ -94,6 +134,8 @@ def verify_voucher(voucher_code: str, postcode: str) -> VoucherVerificationResul
             },
             timeout=10,
         )
+
+        logger.debug(f'verify_voucher(): response: {response.status_code} {response.text[:500]}')
     except requests.RequestException as e:
         logger.error(f'verify_voucher(): RNFL request failed: {str(e)}')
         raise VoucherServiceError('Voucher service is currently unavailable. Please try again later.') from e
@@ -108,7 +150,7 @@ def verify_voucher(voucher_code: str, postcode: str) -> VoucherVerificationResul
             voucher_type='RNFL',
         )
 
-    payload = response.json() if response.content else None
+    payload = _parse_error_payload(response)
     raise VoucherVerificationFailed(_classify_failure(response.status_code, payload))
 
 
