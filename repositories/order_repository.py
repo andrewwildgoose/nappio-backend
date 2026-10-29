@@ -3,6 +3,8 @@ from typing import Optional
 
 from config.supabase import get_supabase
 
+from models.user_models import Address, AddAddressRequest, UserAddress
+
 logger = logging.getLogger('uvicorn.error')
 
 supabase = get_supabase()
@@ -66,6 +68,55 @@ def insert_order_items(order_id: str, items: list[dict]) -> list[dict]:
         logger.error(f"insert_order_items(): Failed to insert order items: {str(e)}")
         raise
 
+def insert_user_address(new_address: UserAddress) -> Optional[UserAddress]:
+    """Insert a new user address into the database."""
+    try:
+        response = supabase.table('user_addresses').insert({
+            "user_id": new_address.user_id,
+            "address_line_1": new_address.address_line_1,
+            "address_line_2": new_address.address_line_2,
+            "city": new_address.city,
+            "postcode": new_address.postcode,
+            "country": new_address.country,
+            "address_notes": new_address.address_notes
+        }).execute()
+
+        logger.debug(f"insert_user_address(): Inserted data: {response}")
+
+        return response.data[0] if response.data else None
+
+    except Exception as e:
+        logger.error(f"insert_user_address(): Failed to insert address: {str(e)}")
+        raise
+
+def insert_guest_address(address_request: Address, email: str) -> AddAddressRequest:
+    """
+    Add a new address for a user to the database.
+    """
+    try:
+
+        response = supabase.table('user_addresses').insert({
+            "address_line_1": address_request.address_line_1,
+            "address_line_2": address_request.address_line_2,
+            "city": address_request.city,
+            "postcode": address_request.postcode,
+            "country": address_request.country,
+            "address_notes": address_request.address_notes
+        }).execute()
+
+        logger.debug(f"insert_guest_address(): Inserted data: {response}")
+
+        address_response = AddAddressRequest(
+            success=True,
+            message="Address added successfully.",
+            address=response.data[0] if response.data else None
+        )
+        logger.debug(f"insert_guest_address(): Successfully added address {response.data[0]['id']} for user {email}")
+        return address_response
+
+    except Exception as e:
+        logger.error(f"insert_guest_address(): Error adding address for user {email}: {str(e)}")
+        raise
 
 def get_order(order_id: str) -> Optional[dict]:
     """Retrieve an order by its primary key."""

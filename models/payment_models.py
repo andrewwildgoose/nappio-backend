@@ -97,7 +97,7 @@ class CartItem(BaseModel):
 
 class CreateOrderCheckoutRequest(BaseModel):
     items: list[CartItem]
-    address: Optional[dict] = None
+    address: Optional[dict[str, str]] = None
     address_id: Optional[str] = None
     cancel_url: Optional[str] = '/'
 

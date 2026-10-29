@@ -12,8 +12,9 @@ from models.payment_models import (
     CreateOrderCheckoutRequest,
     GuestCreateOrderCheckoutRequest,
 )
-from models.user_models import AddUserAddressRequest
-from repositories.order_repository import insert_order, insert_order_items
+from models.user_models import Address
+from repositories.order_repository import insert_guest_address, insert_order, insert_order_items
+from repositories.product_repository import get_active_shop_products
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -30,13 +31,14 @@ async def list_shop_products():
     """
     Return all active one-off products available in the shop.
 
-    This endpoint is **public** – no authentication is required.
+    This endpoint is **public** - no authentication is required.
 
     Powered by the local product catalogue, which is kept in sync with Stripe
     via webhooks (product.created / product.updated / price.created, etc.).
     """
     try:
-        from repositories.product_repository import get_active_shop_products
+        logger.debug("list_shop_products(): Fetching active shop products")
+        
         products = get_active_shop_products()
         return {"products": products}
     except Exception as e:
@@ -64,7 +66,7 @@ async def create_shop_checkout(
         if request.address_id:
             address_id = request.address_id
         else:
-            address_obj = AddUserAddressRequest(
+            address_obj = Address(
                 address_line_1=request.address["address_line_1"],
                 address_line_2=request.address.get("address_line_2"),
                 city=request.address["city"],
@@ -133,18 +135,20 @@ async def create_guest_shop_checkout(request: GuestCreateOrderCheckoutRequest):
         if request.address_id:
             address_id = request.address_id
         elif request.address:
-            from config.supabase import get_supabase
-            _supabase = get_supabase()
-            addr_response = _supabase.table('user_addresses').insert({
-                "address_line_1": request.address["address_line_1"],
-                "address_line_2": request.address.get("address_line_2"),
-                "city": request.address["city"],
-                "postcode": request.address["postcode"],
-                "country": request.address["country"],
-                "address_notes": request.address.get("address_notes"),
-            }).execute()
-            if addr_response.data:
-                address_id = str(addr_response.data[0]['id'])
+            # Add logic to allow existing user to add new address here.
+            # Likely guess checkout at this point so enter into the order table without adding address to user addresses.
+            address_obj = Address(
+                address_line_1=request.address["address_line_1"],
+                address_line_2=request.address.get("address_line_2"),
+                city=request.address["city"],
+                postcode=request.address["postcode"],
+                country=request.address["country"],
+                address_notes=request.address.get("address_notes")
+            )
+            address_response = insert_guest_address(address_obj, request.guest_email)
+            address_id = str(address_response.address.id)
+        else:
+            raise HTTPException(status_code=400, detail="Address information is required.")
 
         total_price = shop_builder.calculate_order_total(request.items)
 

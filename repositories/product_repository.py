@@ -55,6 +55,8 @@ def get_active_shop_products(product_type: str = "oneoff") -> list[dict]:
             .execute()
         )
         logger.debug(f"get_active_shop_products(): Retrieved {len(response.data)} products of type '{product_type}'")
+
+        logger.debug(f"get_active_shop_products(): Retrieved products: {response.data}")
         return response.data if response.data else []
     except Exception as e:
         logger.error(f"get_active_shop_products(): Error fetching shop products: {str(e)}")
