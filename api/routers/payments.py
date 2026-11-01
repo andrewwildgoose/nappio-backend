@@ -21,7 +21,7 @@ from models.payment_models import (
     VoucherVerificationResult,
 )
 from models.user_models import (
-    AddUserAddressRequest,
+    AddAddressRequest,
     SubscriptionRequest,
 )
 from repositories.subscription_repository import (
@@ -79,7 +79,7 @@ async def start_subscription(
                 raise HTTPException(status_code=404, detail="Address not found")
             postcode = selected_address.postcode
         else:
-            address_obj = AddUserAddressRequest(
+            address_obj = AddAddressRequest(
                 address_line_1=request.address["address_line_1"],
                 address_line_2=request.address.get("address_line_2"),
                 city=request.address["city"],
