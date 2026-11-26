@@ -7,8 +7,8 @@ import user_serv.user_service as user_service
 from api.dependencies.auth import get_authenticated_user
 from config.supabase import get_supabase
 from models.user_models import (
-    AddUserAddressRequest,
-    AddUserAddressResponse,
+    AddAddressRequest,
+    AddAddressRequest,
     AssignSubscriptionAddressRequest,
     DeleteAddressResponse,
     SubscriptionDetailsResponse,
@@ -46,9 +46,9 @@ async def get_user_addresses(user=Depends(get_authenticated_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/addresses", response_model=AddUserAddressResponse)
+@router.post("/addresses", response_model=AddAddressRequest)
 async def add_user_address(
-    request: AddUserAddressRequest,
+    request: AddAddressRequest,
     user=Depends(get_authenticated_user)
 ):
     """Add a new address for the authenticated user."""

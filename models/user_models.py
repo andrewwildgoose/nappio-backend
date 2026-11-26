@@ -17,6 +17,17 @@ class UserAddress(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+class GuestAddress(BaseModel):
+    id: Optional[UUID] = None
+    address_line_1: str
+    address_line_2: Optional[str] = None
+    city: str
+    postcode: str
+    country: str
+    address_notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
 
 class ProductDetails(BaseModel):
     name: str
@@ -54,7 +65,7 @@ class UserAddressRequest(BaseModel):
     address_notes: Optional[str] = None
 
 
-class AddUserAddressRequest(BaseModel):
+class Address(BaseModel):
     address_line_1: str
     address_line_2: Optional[str] = None
     city: str
@@ -63,10 +74,10 @@ class AddUserAddressRequest(BaseModel):
     address_notes: Optional[str] = None
 
 
-class AddUserAddressResponse(BaseModel):
+class AddAddressRequest(BaseModel):
     success: bool
     message: str
-    address: Optional[UserAddress] = None
+    address: Optional[UserAddress | GuestAddress] = None
 
 
 class DeleteAddressRequest(BaseModel):

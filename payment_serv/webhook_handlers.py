@@ -63,15 +63,18 @@ async def handle_checkout_completed(event: WebhookEvent) -> None:
 
         logger.info(f"handle_checkout_completed(): Updated checkout session status to {event.data['object']['status']}")
 
-        subscription_id = event.data['object']['metadata']['subscription_id']
-        checkout_type = event.data['object']['metadata']['checkout_type']
+        metadata = event.data['object'].get('metadata') or {}
+        checkout_type = metadata.get('checkout_type')
+        subscription_id = metadata.get('subscription_id')
+        order_id = metadata.get('order_id')
         line_items = [line_item for line_item in supabase_checkout_response['line_items']]
 
         pp.paid_processing(
-            checkout_type,
-            subscription_id,
-            event.data,
-            line_items
+            checkout_type=checkout_type,
+            event_data=event.data,
+            line_items=line_items,
+            subscription_id=subscription_id,
+            order_id=order_id,
         )
 
     except Exception as e:

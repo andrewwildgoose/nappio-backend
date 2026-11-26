@@ -913,3 +913,100 @@ def send_subscription_payment_active_to_team(customer_email: str, customer_name:
     except Exception as e:
         logger.exception(f"Failed to send email to {TEAM_EMAIL}: {str(e)}")
         return {"status": 500, "error": str(e)}
+
+def send_order_confirmation_email(to_email: str, first_name: str, items: list[dict], order_id: str):
+    """
+    Send a one-off order confirmation email to the customer.
+
+    Works for both authenticated users and guests. If first_name is empty or None,
+    a generic greeting is used.
+    """
+    try:
+        greeting_name = first_name if first_name else "there"
+        logger.info(f"send_order_confirmation_email(): Sending order confirmation to {to_email} for order {order_id}")
+
+        mailer = emails.NewEmail(EMAIL_API_TOKEN)
+        mail_body = {}
+
+        mail_from = {
+            "name": SERVICE_NAME,
+            "email": "info@nappio.co.uk",
+        }
+        mailer.set_mail_from(mail_from, mail_body)
+
+        recipients = [{"name": first_name or "Customer", "email": to_email}]
+        mailer.set_mail_to(recipients, mail_body)
+
+        mailer.set_subject(f"Your {SERVICE_NAME} order confirmation", mail_body)
+
+        items_rows = "".join(
+            f"""
+            <tr>
+                <td style="border: 1px solid #ddd; padding: 8px;">{item['item_name']}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">{item['quantity']}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">{item['cost']}</td>
+            </tr>"""
+            for item in items
+        )
+
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f3ed;">
+            <h2 style="color: #262625;">Order Confirmation</h2>
+            <p>Hi {greeting_name},</p>
+            <p>Thank you for your order! We've received your purchase and will be in touch shortly.</p>
+            <p><strong>Order reference:</strong> {order_id}</p>
+            <h3 style="color: #262625;">Order Summary</h3>
+            <table style="border-collapse: collapse; width: 100%; margin-top: 10px; margin-bottom: 20px;">
+                <tr style="background-color: #7cc4a7;">
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Item</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: center;">Qty</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Price</th>
+                </tr>
+                {items_rows}
+            </table>
+            <p>If you have any questions about your order, please contact us at <a href="mailto:info@nappio.co.uk">info@nappio.co.uk</a>.</p>
+            <div style="margin: 30px 0; text-align: center;">
+                <a href="{FRONTEND_URL}"
+                   style="display: inline-block;
+                          background-color: #7cc4a7;
+                          color: #262625;
+                          font-size: 18px;
+                          font-weight: bold;
+                          padding: 14px 28px;
+                          text-decoration: none;
+                          border-radius: 0px;
+                          box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    Visit {SERVICE_NAME}
+                </a>
+            </div>
+        </div>
+        """
+
+        plaintext_content = f"""
+Order Confirmation
+
+Hi {greeting_name},
+
+Thank you for your order! Order reference: {order_id}
+
+Items:
+{'=' * 60}
+"""
+        for item in items:
+            plaintext_content += f"\n{item['item_name']:<30}  Qty: {item['quantity']:>4}  {item['cost']:>12}"
+
+        plaintext_content += f"\n\nQuestions? Email us at info@nappio.co.uk or visit {FRONTEND_URL}"
+
+        mailer.set_html_content(html_content, mail_body)
+        mailer.set_plaintext_content(plaintext_content, mail_body)
+
+        response = mailer.send(mail_body)
+        if response.strip() != '202':
+            logger.error(f"send_order_confirmation_email(): Failed to send to {to_email}. response: {response}")
+            return {"response": response}
+        logger.info(f"send_order_confirmation_email(): Email sent successfully to {to_email}")
+        return {"status": 200, "response": response}
+
+    except Exception as e:
+        logger.exception(f"send_order_confirmation_email(): Failed to send email to {to_email}: {str(e)}")
+        return {"status": 500, "error": str(e)}

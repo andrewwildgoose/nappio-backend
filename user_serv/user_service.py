@@ -10,8 +10,8 @@ from supabase import Client
 import email_serv.email_processor as email_processor
 from config.supabase import get_supabase
 from models.user_models import (
-    AddUserAddressRequest,
-    AddUserAddressResponse,
+    Address,
+    AddAddressRequest,
     ProductDetails,
     SubscriptionDetailsResponse,
     UserAddress,
@@ -147,7 +147,7 @@ def get_user_addresses(user_id: str) -> List[UserAddress]:
         raise
 
 
-def add_user_address(address_request: AddUserAddressRequest, user_id: str) -> AddUserAddressResponse:
+def add_user_address(address_request: Address, user_id: str) -> AddAddressRequest:
     """
     Add a new address for a user to the database.
     """
@@ -159,7 +159,7 @@ def add_user_address(address_request: AddUserAddressRequest, user_id: str) -> Ad
             new_address = UserAddress(**address_data)
             response = insert_user_address(new_address)
             logger.debug(f"add_user_address(): Inserted address data: {response}")
-            address_response = AddUserAddressResponse(
+            address_response = AddAddressRequest(
                 success=True,
                 message="Address added successfully.",
                 address=response if response else None
