@@ -1,5 +1,6 @@
 import logging
 import os
+from urllib.parse import quote
 
 from email_serv.email_processor import send_confirmation_email, send_newsletter_signup_to_team
 from models.newsletter_models import EmailVerificationRequest, NewsletterSubscriber
@@ -30,7 +31,7 @@ def subscribe(subscriber: NewsletterSubscriber) -> dict:
         if not result:
             raise Exception("Failed to insert subscriber into the database")
 
-        confirmation_link = f"{FRONTEND_URL}/confirm-email?email={subscriber.email}"
+        confirmation_link = f"{FRONTEND_URL}/confirm-email?email={quote(subscriber.email)}"
         logger.debug(f"subscribe(): Generated confirmation link: {confirmation_link}")
 
         email_response = send_confirmation_email(

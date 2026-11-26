@@ -66,6 +66,9 @@ SENDGRID_API_KEY=your_sendgrid_api_key
 RNFL_API_URL=your_rnfl_api_url
 RNFL_BEARER_TOKEN=your_rnfl_bearer_token
 RNFL_40_STRIPE_ID=your_rnfl_stripe_coupon_id
+FRONTEND_API_KEY=long_random_string_shared_with_nappio_frontend
+ADMIN_API_KEY=different_long_random_string_shared_with_nappio_dashboard
+ENVIRONMENT=development
 ```
 
 - SUPABASE_URL and SUPABASE_API_KEY are provided when you set up your Supabase project.
@@ -73,6 +76,8 @@ RNFL_40_STRIPE_ID=your_rnfl_stripe_coupon_id
 - SENDGRID_API_KEY is needed if you plan to send emails via SendGrid.
 - RNFL_API_URL and RNFL_BEARER_TOKEN are used for RNFL voucher verification/redeem requests.
 - RNFL_40_STRIPE_ID is the current RNFL Stripe coupon mapping; future voucher coupon mappings should follow the same env-driven pattern.
+- FRONTEND_API_KEY and ADMIN_API_KEY protect the API. Callers must send one in an `X-API-Key` header: the frontend's key works on newsletter/user/payment/service routes, the admin key only on `/api/v1/admin/*`. Stripe webhooks and the `/` health check need no key. If a key is unset, its routes reject every request. Generate keys with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+- ENVIRONMENT=development enables `/docs` and localhost CORS origins. Leave it unset in production.
 
 ### 5. Run the FastAPI Backend Locally
 

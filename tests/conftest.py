@@ -20,6 +20,8 @@ os.environ.setdefault("STRIPE_WEBHOOK_SECRET", "whsec_test_dummy")
 os.environ.setdefault("FRONTEND_URL", "http://localhost:3000")
 os.environ.setdefault("ADMIN_DASHBOARD_URL", "http://localhost:5173")
 os.environ.setdefault("EMAIL_API_TOKEN", "test-email-token")
+os.environ.setdefault("FRONTEND_API_KEY", "test-frontend-key")
+os.environ.setdefault("ADMIN_API_KEY", "test-admin-key")
 
 # ---------------------------------------------------------------------------
 # 2. Replace the real Supabase client factory with a MagicMock so that
