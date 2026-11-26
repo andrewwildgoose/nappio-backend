@@ -78,3 +78,50 @@ class TestVerifyEndpoint:
                 json={"email": "notfound@example.com"},
             )
         assert response.status_code == 404
+
+
+class TestSubscribeValidation:
+    """Input validation that blocks bot/junk signups before they reach the service layer."""
+
+    @pytest.mark.parametrize("postcode", ["TEST", "ABCD", "12", "1AB", "SW2X1", "<b>"])
+    def test_invalid_postcode_rejected(self, client, postcode):
+        with patch("api.routers.newsletter.subscribe") as mock_subscribe:
+            response = client.post(
+                "/api/v1/newsletter/subscribe",
+                json={"first_name": "Bot", "email": "bot@example.com", "postcode": postcode},
+            )
+        assert response.status_code == 422
+        mock_subscribe.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "postcode,expected",
+        [("sw2", "SW2"), ("EC1A", "EC1A"), (" M1 ", "M1"), ("b33", "B33"), ("", None)],
+    )
+    def test_valid_postcode_normalised(self, client, postcode, expected):
+        def echo(subscriber):
+            return {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "first_name": subscriber.first_name,
+                "email": subscriber.email,
+                "postcode": subscriber.postcode,
+                "subscribed_at": "2024-01-01T00:00:00",
+                "email_verified": False,
+            }
+
+        with patch("api.routers.newsletter.subscribe", side_effect=echo):
+            response = client.post(
+                "/api/v1/newsletter/subscribe",
+                json={"first_name": "Alice", "email": "alice@example.com", "postcode": postcode},
+            )
+        assert response.status_code == 200
+        assert response.json()["postcode"] == expected
+
+    @pytest.mark.parametrize("first_name", ["", "   ", "x" * 51, "Visit http://spam.com", "www.spam.com"])
+    def test_invalid_first_name_rejected(self, client, first_name):
+        with patch("api.routers.newsletter.subscribe") as mock_subscribe:
+            response = client.post(
+                "/api/v1/newsletter/subscribe",
+                json={"first_name": first_name, "email": "a@example.com", "postcode": "SW2"},
+            )
+        assert response.status_code == 422
+        mock_subscribe.assert_not_called()
